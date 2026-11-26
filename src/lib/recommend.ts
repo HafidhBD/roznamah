@@ -109,6 +109,8 @@ export async function recommend(sel: Selections, spanStart: string): Promise<Rec
       occurrences,
     });
   }
-  items.sort((a, b) => b.score - a.score || a.occurrences[0].start.localeCompare(b.occurrences[0].start));
+  // Equal scores: national first, then by date.
+  const nationalFirst = (r: Recommendation) => (r.kind === 'national' ? 0 : 1);
+  items.sort((a, b) => b.score - a.score || nationalFirst(a) - nationalFirst(b) || a.occurrences[0].start.localeCompare(b.occurrences[0].start));
   return items;
 }
