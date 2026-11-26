@@ -16,6 +16,16 @@ describe('POST /api/recommendations', () => {
     expect(r.status).toBe(200);
     expect((await r.json()).items.length).toBeGreaterThan(0);
   });
+  it('includes display fields on each item', async () => {
+    const { items } = await (await call({ selections: sel, startMonth: '2027-01-01' })).json();
+    expect(items[0]).toMatchObject({
+      titleAr: expect.any(String),
+      titleEn: expect.any(String),
+      kind: expect.any(String),
+      icon: expect.any(String),
+    });
+    expect(items[0]).toHaveProperty('color');
+  });
   it('returns 400 for invalid JSON, invalid body and month 2027-13', async () => {
     expect((await raw('{nope')).status).toBe(400);
     expect((await call({ selections: {}, startMonth: '2027-01' })).status).toBe(400);

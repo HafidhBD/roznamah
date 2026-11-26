@@ -7,6 +7,11 @@ export type Selections = { sector: string | null; fields: string[]; audiences: s
 export type Reason = { ar: string; en: string };
 export type Recommendation = {
   eventId: string;
+  titleAr: string;
+  titleEn: string;
+  kind: EventRow['kind'];
+  icon: string;
+  color: string | null;
   score: number;
   band: 'high' | 'good' | 'low';
   reasons: Reason[];
@@ -92,7 +97,17 @@ export async function recommend(sel: Selections, spanStart: string): Promise<Rec
     if (occurrences.length === 0) continue;
     const { score, reasons } = scoreEvent({ ...row, tags: tagsByEvent.get(row.id) ?? [] }, sel);
     if (score <= 0) continue;
-    items.push({ eventId: row.id, score, band: bandOf(score), reasons, occurrences });
+    items.push({
+      eventId: row.id,
+      titleAr: row.titleAr,
+      titleEn: row.titleEn || row.titleAr,
+      kind: row.kind,
+      icon: row.icon ?? '★',
+      color: row.color,
+      score, band: bandOf(score),
+      reasons,
+      occurrences,
+    });
   }
   items.sort((a, b) => b.score - a.score || a.occurrences[0].start.localeCompare(b.occurrences[0].start));
   return items;
