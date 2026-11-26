@@ -137,8 +137,8 @@ const DEFS: Def[] = [
   {
     s: 'hijri-new-year', k: 'religious', r: 'h', m: 1, d: 1,
     ar: 'رأس السنة الهجرية', en: 'Islamic New Year',
-    da: 'بداية السنة الهجرية الجديدة، ذكرى هجرة النبي ﷺ من مكة المكرمة إلى المدينة المنورة.',
-    de: 'The first day of the new Hijri year, commemorating the Prophet’s ﷺ migration from Makkah to Madinah.',
+    da: 'أول أيام السنة الهجرية الجديدة، والتقويم الهجري يبدأ من عام هجرة النبي ﷺ من مكة المكرمة إلى المدينة المنورة.',
+    de: 'The first day of the new Hijri year; the Hijri calendar counts from the year of the Prophet’s ﷺ migration from Makkah to Madinah.',
     ia: 'أصدروا تهنئة رسمية بالعام الهجري الجديد مع بطاقة تحمل هوية الجهة.',
     ie: 'Issue an official greeting for the new Hijri year with a branded card.',
     icon: '🌙', color: '#8d692e', src: [UQ, UQ_URL], sec: 'all',
@@ -169,7 +169,7 @@ const DEFS: Def[] = [
   {
     s: 'arafah-day', k: 'religious', r: 'h', m: 12, d: 9,
     ar: 'يوم عرفة', en: 'Day of Arafah',
-    da: 'اليوم التاسع من ذي الحجة، وهو ركن الحج الأعظم وهو من أعظم أيام السنة.',
+    da: 'اليوم التاسع من ذي الحجة، وهو ركن الحج الأعظم ومن أعظم أيام السنة.',
     de: 'The ninth of Dhul Hijjah, the pinnacle of Hajj and one of the most virtuous days of the year.',
     ia: 'انشروا رسالة تهنئة بيوم عرفة مع تنبيه بمواعيد الإجازة المرتبطة بالعيد.',
     ie: 'Post an Arafah greeting along with a notice of the Eid-related holiday schedule.',
@@ -206,7 +206,7 @@ const DEFS: Def[] = [
     de: 'An opportunity to raise awareness of prevention, early detection and support for patients and families.',
     ia: 'نظّموا يوم فحص مبكر أو ندوة توعوية للموظفين، وانشروا رسائل عن الكشف المبكر.',
     ie: 'Host an early-screening day or awareness talk for staff and share early-detection messages.',
-    icon: '🎗️', color: '#7158a8', src: [WHO, 'https://www.who.int/campaigns/world-cancer-day'], sec: 'social',
+    icon: '🎗️', color: '#7158a8', src: ['Union for International Cancer Control (UICC)', 'https://www.worldcancerday.org/'], sec: 'social',
     f: 'health:3', a: 'employees:3 families:2 general:2', u: 'awareness:3 csr:3 internal:2',
   },
   {
@@ -226,12 +226,12 @@ const DEFS: Def[] = [
     de: 'A UNESCO observance celebrating linguistic and cultural diversity and the protection of languages.',
     ia: 'انشروا سلسلة منشورات عن جمال اللغة العربية وتعابيرها المحلية بخط عربي مميز.',
     ie: 'Publish a series on the beauty of Arabic and local expressions using distinctive Arabic calligraphy.',
-    icon: '🗣️', color: '#8b684a', src: [UNESCO, 'https://www.un.org/en/observances/mother-language-day'], sec: 'civic',
+    icon: '🗣️', color: '#8b684a', src: [UNESCO, 'https://www.unesco.org/en/days/mother-language'], sec: 'civic',
     f: 'culture:3 education:2', a: 'general:2 youth:2 children:2', u: 'awareness:3 marketing:2',
   },
   {
     s: 'women-day', k: 'international', r: 'g', m: 3, d: 8,
-    ar: 'اليوم العالمي للمرأة', en: 'International Women’s Day',
+    ar: 'اليوم الدولي للمرأة', en: 'International Women’s Day',
     da: 'مناسبة للاحتفاء بإنجازات النساء وتعزيز المشاركة والفرص المتكافئة.',
     de: 'An occasion to celebrate women’s achievements and promote participation and equal opportunity.',
     ia: 'سلّطوا الضوء على إنجازات الموظفات وبرامج التمكين في جهتكم بمحتوى مرئي وشهادات حقيقية.',
@@ -306,7 +306,7 @@ const DEFS: Def[] = [
     de: 'A day to promote awareness of heritage sites and monuments and their preservation.',
     ia: 'عرّفوا بموقع تراثي قريب من مقركم عبر صور وحقائق مختصرة، أو نظّموا زيارة للموظفين.',
     ie: 'Showcase a heritage site near your premises with photos and short facts, or arrange a staff visit.',
-    icon: '🏛️', color: '#8b684a', src: [UNESCO, UNESCO_INDEX], sec: 'civic',
+    icon: '🏛️', color: '#8b684a', src: ['ICOMOS', 'https://www.icomos.org/'], sec: 'civic',
     f: 'culture:3 tourism:3', a: 'general:2 families:2 youth:1', u: 'awareness:3 event:2 marketing:2',
   },
   {
@@ -451,7 +451,7 @@ const DEFS: Def[] = [
   },
   {
     s: 'public-service-day', k: 'international', r: 'g', m: 6, d: 23,
-    ar: 'اليوم العالمي للخدمة العامة', en: 'United Nations Public Service Day',
+    ar: 'يوم الأمم المتحدة للخدمة العامة', en: 'United Nations Public Service Day',
     da: 'يوم لتقدير العاملين في الخدمة العامة ودورهم في خدمة المجتمع.',
     de: 'A day honouring public servants and their contribution to serving society.',
     ia: 'كرّموا موظفي الخطوط الأمامية وأبرزوا إنجازات خدمة المستفيدين خلال العام.',
@@ -471,7 +471,7 @@ const DEFS: Def[] = [
   },
   {
     s: 'msme-day', k: 'field', r: 'g', m: 6, d: 27,
-    ar: 'اليوم العالمي للمنشآت الصغيرة والمتوسطة', en: 'Micro-, Small and Medium-sized Enterprises Day',
+    ar: 'يوم المشاريع متناهية الصغر والصغيرة والمتوسطة', en: 'Micro-, Small and Medium-sized Enterprises Day',
     da: 'يوم يبرز دور المنشآت الصغيرة والمتوسطة في النمو وتوفير الوظائف.',
     de: 'A day highlighting the role of micro, small and medium enterprises in growth and job creation.',
     ia: 'أعلنوا عن برنامج دعم أو تمويل لرواد الأعمال، أو اعرضوا قصة نجاح لمنشأة ناشئة.',
@@ -556,7 +556,7 @@ const DEFS: Def[] = [
     de: 'Highlights the social, cultural and economic value of tourism and destination experiences.',
     ia: 'روّجوا لوجهة أو تجربة سياحية محلية بصور وعروض خاصة للعائلات.',
     ie: 'Promote a local destination or experience with photos and special family offers.',
-    icon: '🗺️', color: '#b46c37', src: ['UN Tourism', 'https://www.unwto.org/world-tourism-day'], sec: 'comm',
+    icon: '🗺️', color: '#b46c37', src: ['UN Tourism', 'https://www.untourism.int/world-tourism-day'], sec: 'comm',
     f: 'tourism:3 food_hospitality:3 culture:2 logistics:2 environment:1', a: 'families:3 customers:3 general:2', u: 'marketing:3 event:2 awareness:2',
   },
   {
@@ -734,8 +734,8 @@ const DEFS: Def[] = [
   {
     s: 'white-friday', k: 'commercial', r: 'm', m: 11,
     ar: 'الجمعة البيضاء', en: 'White Friday',
-    da: 'موسم التخفيضات الكبرى في المملكة، ويقع في آخر جمعة من نوفمبر.',
-    de: 'The Kingdom’s main sales season, falling on the last Friday of November.',
+    da: 'موسم التخفيضات الكبرى في المملكة، ويوافق الجمعة التالية لعيد الشكر الأمريكي في أواخر نوفمبر.',
+    de: 'The Kingdom’s main sales season, on the Friday after US Thanksgiving in late November.',
     ia: 'أعلنوا عن عروضكم قبل الموعد بأسبوعين مع عدّاد تنازلي، وجهّزوا خدمة العملاء لضغط الطلبات.',
     ie: 'Announce offers two weeks ahead with a countdown and prepare customer service for the order surge.',
     icon: '🏷️', color: '#1f1f2e', src: null, sec: 'comm',
