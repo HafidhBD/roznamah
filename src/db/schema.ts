@@ -19,10 +19,11 @@ import {
 
 import type { Selections } from '@/lib/recommend';
 import type { Design } from '@/lib/design';
+import type { CalendarSnapshot } from '@/lib/snapshot-core';
 
-// Placeholder jsonb types; later tasks will tighten them.
+// Placeholder jsonb type; later tasks will tighten it.
 export type FormatRequest = Record<string, unknown>;
-export type CalendarSnapshot = unknown;
+export type { CalendarSnapshot };
 
 export const taxonomyGroup = pgEnum('taxonomy_group', ['sector', 'field', 'audience', 'use']);
 export const eventKind = pgEnum('event_kind', [

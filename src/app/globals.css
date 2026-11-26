@@ -30,3 +30,8 @@ body {
   color: var(--ink);
   font-family: var(--font-ui);
 }
+
+/* Pages that need the full width (the studio's side-by-side preview). */
+main:has(> [data-wide]) {
+  max-width: 1440px;
+}

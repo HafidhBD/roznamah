@@ -45,7 +45,8 @@ export const designSchema = z.object({
   notesArea: z.boolean(),
 }) satisfies z.ZodType<Design>;
 
-export const designPatchSchema = designSchema.partial().strict();
+/** Client-writable design fields. The logo path is set only by the logo upload route. */
+export const designPatchSchema = designSchema.omit({ logoPath: true }).partial().strict();
 
 export const defaultDesign: Design = {
   orgNameAr: '',

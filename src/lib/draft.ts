@@ -99,6 +99,10 @@ export type CalendarEventView = {
   id: string;
   eventId: string | null;
   title: string;
+  titleAr: string;
+  titleEn: string;
+  descriptionAr: string;
+  descriptionEn: string;
   kind: string;
   color: string;
   icon: string;
@@ -127,6 +131,10 @@ export async function listEventViews(
         id: ce.id,
         eventId: ev.id,
         title: lang === 'en' ? ev.titleEn || ev.titleAr : ev.titleAr,
+        titleAr: ev.titleAr,
+        titleEn: ev.titleEn || ev.titleAr,
+        descriptionAr: ev.descriptionAr,
+        descriptionEn: ev.descriptionEn || ev.descriptionAr,
         kind: ev.kind,
         color: ev.color ?? primary,
         icon: ev.icon ?? '★',
@@ -141,6 +149,10 @@ export async function listEventViews(
       id: ce.id,
       eventId: null,
       title,
+      titleAr: ce.customTitleAr || ce.customTitleEn || '',
+      titleEn: ce.customTitleEn || ce.customTitleAr || '',
+      descriptionAr: '',
+      descriptionEn: '',
       kind: 'custom',
       color: ce.customColor ?? primary,
       icon: '★',

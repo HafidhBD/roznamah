@@ -1,4 +1,5 @@
-import { eq } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
+import type { PgUpdateSetSource } from 'drizzle-orm/pg-core';
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { db } from '@/db/client';
@@ -49,7 +50,7 @@ export async function PATCH(req: Request) {
   }
   const draft = (await draftFromRequest(req, true))!;
   const { startMonth, selections, design } = parsed.data;
-  const set: Partial<typeof calendars.$inferInsert> = { updatedAt: new Date() };
+  const set: PgUpdateSetSource<typeof calendars> = { updatedAt: new Date() };
   if (startMonth) set.startMonth = startMonth;
   if (selections) set.selections = selections;
   if (design) {
@@ -57,7 +58,8 @@ export async function PATCH(req: Request) {
     if (!merged.success) {
       return NextResponse.json({ error: 'invalid_body', issues: merged.error.issues }, { status: 400 });
     }
-    set.design = merged.data;
+    // Merge in SQL so a concurrent write to other design fields (e.g. the logo upload) is kept.
+    set.design = sql`${JSON.stringify(defaultDesign)}::jsonb || ${calendars.design} || ${JSON.stringify(design)}::jsonb`;
   }
   const [row] = await db.update(calendars).set(set).where(eq(calendars.id, draft.calendar.id)).returning();
   return withDraftCookie(NextResponse.json(await payload(req, { ...draft, calendar: row })), draft);
