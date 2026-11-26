@@ -10,6 +10,8 @@ export default defineConfig({
   test: {
     include: ['tests/unit/**/*.test.ts'],
     passWithNoTests: true,
+    // next-auth imports 'next/server' without an extension; let vite resolve it.
+    server: { deps: { inline: ['next-auth'] } },
     env: { DATABASE_URL: testDb },
   },
 });

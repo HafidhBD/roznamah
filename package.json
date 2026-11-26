@@ -17,13 +17,16 @@
     "build:worker": "tsup"
   },
   "dependencies": {
+    "@auth/drizzle-adapter": "^1.11.3",
     "@fontsource/cairo": "^5.3.0",
     "@fontsource/ibm-plex-sans-arabic": "^5.3.0",
     "@fontsource/noto-kufi-arabic": "^5.3.0",
     "@fontsource/readex-pro": "^5.3.0",
     "@fontsource/tajawal": "^5.3.0",
     "drizzle-orm": "^0.45.4",
+    "exceljs": "^4.4.0",
     "next": "^16.4.6",
+    "next-auth": "^5.0.0-beta.32",
     "node-vibrant": "^4.0.4",
     "pdf-lib": "^1.17.1",
     "pg-boss": "^12.40.0",
