@@ -11,8 +11,8 @@ export interface SeedOptions {
 
 /**
  * Safe to run on every release: by default it only inserts rows that do not exist yet
- * (taxonomy by group+key, events by slug, tags by event+term, occurrences by event+year)
- * and never modifies admin edits. With `update: true` it upserts and rewrites tags.
+ * (taxonomy by group+key, events by slug) and, for newly inserted events only, their tags and
+ * occurrences. It never modifies or restores admin edits. With `update: true` it upserts and rewrites tags.
  */
 export async function runSeed(
   opts: SeedOptions = {},
@@ -41,9 +41,9 @@ export async function runSeed(
             .onConflictDoUpdate({ target: events.slug, set: { ...row, updatedAt: dsql`now()` } })
             .returning({ id: events.id })
         : await ins.onConflictDoNothing({ target: events.slug }).returning({ id: events.id });
-      const eventId =
-        saved?.id ??
-        (await tx.select({ id: events.id }).from(events).where(eq(events.slug, e.slug)))[0].id;
+      // Insert-only: an event that already exists keeps its tags and occurrences exactly as the admin left them.
+      if (!update && !saved) continue;
+      const eventId = saved.id;
 
       if (update) await tx.delete(eventTags).where(eq(eventTags.eventId, eventId));
       const tagRows = tags.map((t) => {
@@ -51,7 +51,7 @@ export async function runSeed(
         if (id === undefined) throw new Error(`Taxonomy term missing: ${t.group}:${t.key}`);
         return { eventId, termId: id, weight: t.weight };
       });
-      await tx.insert(eventTags).values(tagRows).onConflictDoNothing();
+      await tx.insert(eventTags).values(tagRows);
 
       for (const o of occurrences) {
         const oi = tx
@@ -63,7 +63,7 @@ export async function runSeed(
             set: { startDate: o.startDate, status: o.status, sourceUrl: o.sourceUrl ?? null, updatedAt: dsql`now()` },
           });
         } else {
-          await oi.onConflictDoNothing();
+          await oi;
         }
       }
     }

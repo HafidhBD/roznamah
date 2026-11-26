@@ -1,5 +1,5 @@
 import { afterAll, describe, expect, it } from 'vitest';
-import { and, count, eq } from 'drizzle-orm';
+import { and, asc, count, eq } from 'drizzle-orm';
 import { db, sql } from '@/db/client';
 import { eventOccurrences, eventTags, events, taxonomyTerms } from '@/db/schema';
 import { runSeed } from '@/db/seed/run';
@@ -118,6 +118,31 @@ describe('seed is non-destructive', () => {
     const [restoredTag] = await db.select().from(eventTags).where(tagKey);
     expect(restored.titleAr).toBe(orig.title);
     expect(restoredTag.weight).toBe(orig.weight);
+  });
+
+  it('does not re-add tags or occurrences an admin removed', async () => {
+    await runSeed();
+    const [nd] = await db.select().from(events).where(eq(events.slug, 'national-day'));
+    const [wf] = await db.select().from(events).where(eq(events.slug, 'white-friday'));
+    try {
+      const [tag] = await db
+        .select().from(eventTags).where(eq(eventTags.eventId, nd.id))
+        .orderBy(asc(eventTags.termId)).limit(1);
+      const tagKey = and(eq(eventTags.eventId, nd.id), eq(eventTags.termId, tag.termId));
+      const occKey = and(eq(eventOccurrences.eventId, wf.id), eq(eventOccurrences.year, 2027));
+      await db.delete(eventTags).where(tagKey);
+      await db.delete(eventOccurrences).where(occKey);
+
+      await runSeed();
+      expect(await db.select().from(eventTags).where(tagKey)).toHaveLength(0);
+      expect(await db.select().from(eventOccurrences).where(occKey)).toHaveLength(0);
+
+      await runSeed({ update: true });
+      expect(await db.select().from(eventTags).where(tagKey)).toHaveLength(1);
+      expect(await db.select().from(eventOccurrences).where(occKey)).toHaveLength(1);
+    } finally {
+      await runSeed({ update: true });
+    }
   });
 
   it('no longer seeds unofficial occasions', () => {
