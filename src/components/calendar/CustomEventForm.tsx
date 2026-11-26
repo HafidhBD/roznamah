@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { t, type Lang, type MessageKey } from '@/i18n/core';
 import type { CustomPayload, CustomResult } from '@/components/plan-builder/useDraftEvents';
 import { Modal } from './Modal';
+import { monthLabel, pad, spanMonths } from './util';
 
 type Props = {
   lang: Lang;
@@ -26,6 +27,17 @@ export function CustomEventForm({ lang, min, max, defaultDate, primary, onSubmit
   const [color, setColor] = useState(primary);
   const [errors, setErrors] = useState<Partial<Record<'titleAr' | 'titleEn' | 'date' | 'form', MessageKey>>>({});
   const [saving, setSaving] = useState(false);
+
+  // Day + month selects instead of <input type="date">: native date fields render the OS locale's
+  // digits (Arabic-Indic on many Arabic devices); these option labels always use Western digits.
+  const months = spanMonths(`${min.slice(0, 7)}-01`);
+  const monthKey = date.slice(0, 7);
+  const [y, m] = monthKey.split('-').map(Number);
+  const daysInMonth = new Date(Date.UTC(y, m, 0)).getUTCDate();
+  const pickDate = (key: string, day: number) => {
+    const [yy, mm] = key.split('-').map(Number);
+    setDate(`${key}-${pad(Math.min(day, new Date(Date.UTC(yy, mm, 0)).getUTCDate()))}`);
+  };
 
   const colors = [primary, ...PRESETS.filter((c) => c.toLowerCase() !== primary.toLowerCase())].slice(0, 6);
 
@@ -89,20 +101,40 @@ export function CustomEventForm({ lang, min, max, defaultDate, primary, onSubmit
           />
           {err('titleEn')}
         </label>
-        <label className="flex flex-col gap-1.5 text-sm font-semibold">
-          {t(lang, 'calendar.custom.date')}
-          <input
-            data-testid="custom-date"
-            type="date"
-            min={min}
-            max={max}
-            value={date}
-            onChange={(e) => setDate(e.target.value)}
-            aria-invalid={!!errors.date}
-            className={field}
-          />
+        <fieldset className="flex flex-col gap-1.5">
+          <legend className="mb-1.5 text-sm font-semibold">{t(lang, 'calendar.custom.date')}</legend>
+          <div className="flex gap-2">
+            <select
+              data-testid="custom-day"
+              aria-label={t(lang, 'calendar.custom.day')}
+              value={Number(date.slice(8, 10))}
+              onChange={(e) => pickDate(monthKey, Number(e.target.value))}
+              aria-invalid={!!errors.date}
+              className={`${field} w-24 shrink-0`}
+            >
+              {Array.from({ length: daysInMonth }, (_, i) => (
+                <option key={i + 1} value={i + 1}>
+                  {i + 1}
+                </option>
+              ))}
+            </select>
+            <select
+              data-testid="custom-month"
+              aria-label={t(lang, 'calendar.custom.month')}
+              value={monthKey}
+              onChange={(e) => pickDate(e.target.value, Number(date.slice(8, 10)))}
+              aria-invalid={!!errors.date}
+              className={field}
+            >
+              {months.map((mo) => (
+                <option key={mo.key} value={mo.key}>
+                  {monthLabel(lang, mo.year, mo.month0)}
+                </option>
+              ))}
+            </select>
+          </div>
           {err('date')}
-        </label>
+        </fieldset>
         <fieldset className="flex flex-col gap-2">
           <legend className="mb-1.5 text-sm font-semibold">{t(lang, 'calendar.custom.color')}</legend>
           <div className="flex flex-wrap gap-2.5">

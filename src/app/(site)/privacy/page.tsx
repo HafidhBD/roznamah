@@ -1,7 +1,9 @@
 import type { Metadata } from 'next';
 import { getLang, t, type MessageKey } from '@/i18n';
 
-export const metadata: Metadata = { title: 'Privacy | الخصوصية — Roznamah' };
+export async function generateMetadata(): Promise<Metadata> {
+  return { title: t(await getLang(), 'privacy.title') };
+}
 
 const SECTIONS: { title: MessageKey; body: MessageKey }[] = [
   { title: 'privacy.collect.title', body: 'privacy.collect.body' },

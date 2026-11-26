@@ -1,10 +1,15 @@
+import type { Metadata } from 'next';
 import { CalendarApp } from '@/components/calendar/CalendarApp';
 import { getDraft, listEventViews } from '@/lib/draft';
 import { defaultDesign } from '@/lib/design';
-import { getLang } from '@/i18n';
+import { getLang, t } from '@/i18n';
 import type { Selections } from '@/lib/recommend';
 
 export const dynamic = 'force-dynamic';
+
+export async function generateMetadata(): Promise<Metadata> {
+  return { title: t(await getLang(), 'nav.calendar') };
+}
 
 const emptySelections: Selections = { sector: null, fields: [], audiences: [], uses: [] };
 

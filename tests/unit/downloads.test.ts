@@ -421,8 +421,8 @@ describe('render-download job', () => {
     const after = await statusOf(row.id);
     expect(after.status).toBe('ready');
     expect(after.files).toEqual([
-      { name: 'roznamah-wall-A4.pdf', size: 13 },
-      { name: 'roznamah-wall-A3-bleed.pdf', size: 13 },
+      { name: 'roznamah-wall-A4.pdf', size: 13, pages: 13 },
+      { name: 'roznamah-wall-A3-bleed.pdf', size: 13, pages: 13 },
     ]);
     const { readdirSync } = await import('node:fs');
     expect(readdirSync(path.join(filesDir, row.id)).sort()).toEqual(['roznamah-wall-A3-bleed.pdf', 'roznamah-wall-A4.pdf']);

@@ -6,6 +6,7 @@ test('renders Arabic RTL by default and toggles to English, persisting', async (
   await expect(html).toHaveAttribute('dir', 'rtl');
   await expect(html).toHaveAttribute('lang', 'ar');
   await expect(page.getByTestId('brand')).toHaveText('رَزنامة');
+  await expect(page).toHaveTitle('رَزنامة — قوِّم عامك بمناسباتك');
 
   await page.getByTestId('lang-toggle').click();
   await expect(html).toHaveAttribute('dir', 'ltr');
@@ -15,6 +16,9 @@ test('renders Arabic RTL by default and toggles to English, persisting', async (
   await page.reload();
   await expect(html).toHaveAttribute('lang', 'en');
   await expect(html).toHaveAttribute('dir', 'ltr');
+  await expect(page).toHaveTitle('Roznamah — Plan your year around its occasions');
+  await page.goto('/calendar');
+  await expect(page).toHaveTitle('Calendar — Roznamah');
 });
 
 test('nav links resolve to real routes', async ({ page }) => {

@@ -11,7 +11,7 @@ export type CustomResult = { ok: true } | { ok: false; error: string };
 export function useDraftEvents(initial: CalendarEventView[]) {
   const [events, setEvents] = useState(initial);
   const [busy, setBusy] = useState<Set<string>>(new Set());
-  /** Last failed action, so a page can show feedback; the plan builder ignores it. */
+  /** Last failed action, so the page can show feedback (DraftFailureAlert). */
   const [failure, setFailure] = useState<DraftAction | null>(null);
 
   const rowIdByEvent = new Map(events.flatMap((e) => (e.eventId ? [[e.eventId, e.id] as const] : [])));

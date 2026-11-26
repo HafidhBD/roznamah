@@ -1,8 +1,9 @@
+import type { Metadata } from 'next';
 import { and, asc, eq } from 'drizzle-orm';
 import { StudioPanel } from '@/components/studio/StudioPanel';
 import { db } from '@/db/client';
 import { taxonomyTerms } from '@/db/schema';
-import { getLang } from '@/i18n';
+import { getLang, t } from '@/i18n';
 import { defaultDesign } from '@/lib/design';
 import { getDraft, listEventViews } from '@/lib/draft';
 import { logoUrlFor, storedPalette } from '@/lib/logo';
@@ -10,6 +11,10 @@ import { ownLogoPath } from '@/lib/snapshot';
 import { turnstileSiteKey } from '@/lib/turnstile';
 
 export const dynamic = 'force-dynamic';
+
+export async function generateMetadata(): Promise<Metadata> {
+  return { title: t(await getLang(), 'nav.studio') };
+}
 
 export default async function Page({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const lang = await getLang();

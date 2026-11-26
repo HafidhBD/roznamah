@@ -6,6 +6,7 @@ import { t, type Lang } from '@/i18n/core';
 import type { CalendarEventView } from '@/lib/draft';
 import type { Recommendation, Selections } from '@/lib/recommend';
 import { ChoiceChip } from './ChoiceChip';
+import { DraftFailureAlert } from './DraftFailureAlert';
 import { RecommendationCard } from './RecommendationCard';
 import { useDraftEvents } from './useDraftEvents';
 
@@ -249,6 +250,11 @@ export function PlanBuilder({ lang, taxonomy, months, initial }: Props) {
       )}
 
       <div className="fixed inset-x-0 bottom-12 z-10 border-t border-line bg-surface/95 backdrop-blur md:bottom-0">
+        {draft.failure && (
+          <div className="mx-auto max-w-5xl px-4 pt-3">
+            <DraftFailureAlert lang={lang} failure={draft.failure} onDismiss={draft.clearFailure} testId="plan-error" />
+          </div>
+        )}
         <div className="mx-auto flex max-w-5xl items-center justify-between gap-3 px-4 py-3">
           <p className="text-sm font-semibold" data-testid="plan-bar">
             <span data-testid="plan-count" className="text-brand">

@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useEffect, useRef, useState } from 'react';
 import { t, type Lang, type MessageKey } from '@/i18n/core';
 import type { DownloadStatus } from '@/lib/downloads';
+import type { DownloadFile } from '@/db/schema';
 
 const POLL_MS = 3000;
 const AGAIN_HREF = '/studio?download=1';
@@ -71,12 +72,16 @@ function Icon({ kind }: { kind: 'clock' | 'check' | 'alert' | 'file' }) {
   );
 }
 
-function fileLabel(lang: Lang, name: string) {
-  const m = /^roznamah-wall-(A4|A3)(-bleed)?\.pdf$/.exec(name);
-  if (!m) return { title: name, sub: '' };
+function fileLabel(lang: Lang, file: DownloadFile) {
+  const m = /^roznamah-wall-(A4|A3)(-bleed)?\.pdf$/.exec(file.name);
+  const details = [
+    file.pages ? `${file.pages} ${t(lang, 'dlp.file.pages')}` : null,
+    m?.[2] ? t(lang, 'dlp.file.bleed') : null,
+    mb(lang, file.size),
+  ];
   return {
-    title: `${t(lang, 'dlp.file.wall')} ${m[1]}`,
-    sub: m[2] ? t(lang, 'dlp.file.bleed') : t(lang, 'dlp.file.pages'),
+    title: m ? `${t(lang, 'dlp.file.wall')} ${m[1]}` : file.name,
+    sub: details.filter(Boolean).join(' · '),
   };
 }
 
@@ -178,7 +183,7 @@ export function DownloadStatusView({ lang, token, initial }: Props) {
             {header('bg-emerald-50 text-emerald-600', 'check', 'dlp.ready.title', 'dlp.ready.body')}
             <ul className="flex flex-col gap-3" data-testid="download-files">
               {files.map((f) => {
-                const label = fileLabel(lang, f.name);
+                const label = fileLabel(lang, f);
                 return (
                   <li key={f.name} className="flex items-center gap-3 rounded-2xl border border-line bg-white p-3 sm:p-4">
                     <span className="flex size-12 shrink-0 items-center justify-center rounded-xl bg-brand/10 p-2.5 text-brand">
@@ -186,8 +191,8 @@ export function DownloadStatusView({ lang, token, initial }: Props) {
                     </span>
                     <span className="flex min-w-0 flex-1 flex-col gap-0.5">
                       <span className="truncate text-sm font-semibold text-ink">{label.title}</span>
-                      <span className="truncate text-xs text-muted">
-                        {label.sub} · {mb(lang, f.size)}
+                      <span className="truncate text-xs text-muted" data-testid="file-details">
+                        {label.sub}
                       </span>
                       <span className="truncate font-mono text-[11px] text-muted/80">
                         <bdi>{f.name}</bdi>

@@ -6,7 +6,14 @@ import '../globals.css';
 import { getLang, t, type MessageKey } from '@/i18n';
 import { toggleLang } from '../lang-actions';
 
-export const metadata: Metadata = { title: 'Roznamah | رَزنامة' };
+export async function generateMetadata(): Promise<Metadata> {
+  const lang = await getLang();
+  const brand = t(lang, 'brand.name');
+  return {
+    title: { default: `${brand} — ${t(lang, 'brand.tagline')}`, template: `%s — ${brand}` },
+    description: t(lang, 'plan.hero.subtitle'),
+  };
+}
 
 const NAV: { href: string; key: MessageKey; id: string }[] = [
   { href: '/', key: 'nav.home', id: 'home' },

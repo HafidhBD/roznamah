@@ -45,13 +45,14 @@ export async function processDownload(downloadId: string, browser: Browser, atte
       const out = path.join(dir, name);
       const part = `${out}.part`;
       const started = Date.now();
+      let pages: number;
       try {
-        await renderPdf(downloadId, format, part, { browser });
+        ({ pages } = await renderPdf(downloadId, format, part, { browser }));
         await rename(part, out);
       } finally {
         await rm(part, { force: true });
       }
-      files.push({ name, size: (await stat(out)).size });
+      files.push({ name, size: (await stat(out)).size, pages });
       console.info(`[worker] ${downloadId} ${name} in ${Date.now() - started} ms`);
     }
     await db.update(downloads).set({ status: 'ready', files, error: null }).where(notFailed);

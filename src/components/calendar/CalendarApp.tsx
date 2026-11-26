@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { t, type Lang } from '@/i18n/core';
+import { DraftFailureAlert } from '@/components/plan-builder/DraftFailureAlert';
 import { useDraftEvents } from '@/components/plan-builder/useDraftEvents';
 import type { CalendarEventView } from '@/lib/draft';
 import type { Recommendation, Selections } from '@/lib/recommend';
@@ -113,25 +114,15 @@ export function CalendarApp({ lang, startMonth, weekStart, primary, today, selec
         </button>
       </header>
 
-      {failureText && (
-        <div
-          role="alert"
-          data-testid="calendar-error"
-          className="flex items-center justify-between gap-3 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700"
-        >
-          <span>{failureText}</span>
-          <button
-            type="button"
-            onClick={() => {
-              setDismissed(true);
-              draft.clearFailure();
-            }}
-            className="shrink-0 rounded-lg px-2 py-1 font-semibold hover:bg-red-100"
-          >
-            {t(lang, 'calendar.err.dismiss')}
-          </button>
-        </div>
-      )}
+      <DraftFailureAlert
+        lang={lang}
+        failure={dismissed ? null : draft.failure}
+        testId="calendar-error"
+        onDismiss={() => {
+          setDismissed(true);
+          draft.clearFailure();
+        }}
+      />
 
       {empty ? (
         <section

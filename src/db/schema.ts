@@ -25,7 +25,8 @@ import type { CalendarSnapshot } from '@/lib/snapshot-core';
 /** One requested output of a download (same shape as the print route's page format). */
 export type FormatRequest = PageFormat;
 /** A rendered file of a download, stored under FILES_DIR/<downloadId>/<name>. */
-export type DownloadFile = { name: string; size: number };
+/** `pages` is absent on files rendered before it was recorded. */
+export type DownloadFile = { name: string; size: number; pages?: number };
 export type { CalendarSnapshot };
 
 export const taxonomyGroup = pgEnum('taxonomy_group', ['sector', 'field', 'audience', 'use']);

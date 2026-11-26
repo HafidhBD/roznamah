@@ -270,6 +270,7 @@ export async function getDownloadStatus(token: string): Promise<DownloadStatus |
       : row.files.map((f) => ({
           name: f.name,
           size: f.size,
+          ...(f.pages ? { pages: f.pages } : {}),
           url: `/api/files/${encodeURIComponent(token)}/${encodeURIComponent(f.name)}`,
         }));
   return { status, files, expired };

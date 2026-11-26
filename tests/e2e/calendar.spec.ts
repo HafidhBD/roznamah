@@ -51,7 +51,12 @@ test('month view, custom occasion add/remove, list view, back to home', async ({
   // add a custom occasion on 2027-05-10
   await page.getByTestId('add-custom').click();
   await page.getByTestId('custom-title-ar').fill('ذكرى تأسيس الشركة');
-  await page.getByTestId('custom-date').fill('2027-05-10');
+  await page.getByTestId('custom-month').selectOption('2027-05');
+  await page.getByTestId('custom-day').selectOption('10');
+  // day/month pickers instead of a native date field: Western digits on every device
+  const labels = await page.locator('[data-testid="custom-day"] option, [data-testid="custom-month"] option').allTextContents();
+  expect(labels.join(' ')).toMatch(/2027/);
+  expect(labels.join(' ')).not.toMatch(/[\u0660-\u0669\u06F0-\u06F9]/);
   await page.getByTestId('custom-submit').click();
   await expect(page.getByTestId('custom-form')).toBeHidden();
   await expect(page.getByTestId('calendar-count')).toHaveText('2');
@@ -149,9 +154,8 @@ test('failures are shown to the visitor, and the form validates inline', async (
   await page.getByTestId('custom-submit').click();
   await expect(page.getByTestId('custom-error-titleAr')).toBeVisible();
   await page.getByTestId('custom-title-ar').fill('x');
-  await page.getByTestId('custom-date').fill('2031-01-01');
-  await page.getByTestId('custom-submit').click();
-  await expect(page.getByTestId('custom-error-date')).toBeVisible();
+  // only the span's 12 months can be picked
+  await expect(page.getByTestId('custom-month').locator('option')).toHaveCount(12);
 
   // a server-side rejection (date outside the span) surfaces inline too
   await page.route('**/api/draft/events', (route) =>
@@ -159,7 +163,8 @@ test('failures are shown to the visitor, and the form validates inline', async (
       ? route.fulfill({ status: 400, contentType: 'application/json', body: '{"error":"date_outside_span"}' })
       : route.continue(),
   );
-  await page.getByTestId('custom-date').fill('2027-02-02');
+  await page.getByTestId('custom-month').selectOption('2027-02');
+  await page.getByTestId('custom-day').selectOption('2');
   await page.getByTestId('custom-submit').click();
   await expect(page.getByTestId('custom-error-date')).toHaveText('التاريخ خارج فترة التقويم الممتدة 12 شهرًا.');
 });

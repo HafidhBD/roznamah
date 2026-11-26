@@ -51,3 +51,31 @@ test('plan builder: recommend, add, persist, isolate', async ({ page, browser, b
   await remember(other);
   await other.close();
 });
+
+test('a failed add or remove is shown to the visitor', async ({ page }) => {
+  await page.goto('/');
+  await page.getByTestId('sector-private').click();
+  await page.getByTestId('recommend-btn').click();
+  const card = page.getByTestId('rec-card').first();
+  await expect(card).toBeVisible();
+  await remember(page.context());
+
+  await page.route('**/api/draft/events', (route) =>
+    route.request().method() === 'POST' ? route.fulfill({ status: 500, body: '{}' }) : route.continue(),
+  );
+  await card.getByTestId('rec-toggle').click();
+  await expect(page.getByTestId('plan-error')).toHaveText(/تعذّرت إضافة المناسبة/);
+  await expect(page.getByTestId('plan-count')).toHaveText('0');
+  await page.unroute('**/api/draft/events');
+
+  await card.getByTestId('rec-toggle').click();
+  await expect(page.getByTestId('plan-count')).toHaveText('1');
+  await expect(page.getByTestId('plan-error')).toHaveCount(0);
+
+  await page.route('**/api/draft/events?id=*', (route) => route.fulfill({ status: 500, body: '{}' }));
+  await card.getByTestId('rec-toggle').click();
+  await expect(page.getByTestId('plan-error')).toHaveText(/تعذّرت إزالة المناسبة/);
+  await expect(page.getByTestId('plan-count')).toHaveText('1');
+  await page.getByTestId('plan-error').getByRole('button').click();
+  await expect(page.getByTestId('plan-error')).toHaveCount(0);
+});
