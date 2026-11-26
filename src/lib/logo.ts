@@ -72,21 +72,22 @@ async function extractPalette(png: Buffer): Promise<string[]> {
 /**
  * Validates an uploaded logo by its bytes (never the name or declared mime), re-encodes it to PNG
  * (SVG is rasterized, so no markup survives; raster metadata is stripped), stores it under
- * UPLOAD_DIR/<calendarId>/<uuid>.png and extracts up to 5 palette colors.
+ * UPLOAD_DIR/<calendarId>/<uuid>.png and extracts up to 5 palette colors. The caller deletes the
+ * previous logo only once the new path is saved (see deleteLogo).
  */
 export async function processLogo(
   file: LogoFile,
-  opts: { calendarId: string; replaces?: string | null },
+  opts: { calendarId: string },
 ): Promise<ProcessedLogo> {
   if (file.bytes.length > MAX_LOGO_BYTES) throw new LogoError('TOO_LARGE');
   if (!/^[0-9a-f-]{36}$/.test(opts.calendarId)) throw new Error('invalid calendar id');
 
   let format: string | undefined;
-  let width: number | undefined;
+  let longest = MAX_LOGO_WIDTH;
   try {
     const meta = await sharp(file.bytes, { limitInputPixels: false }).metadata();
     format = meta.format;
-    width = meta.width;
+    longest = Math.max(1, meta.width ?? 0, meta.height ?? 0);
   } catch {
     // Unreadable: a known image signature means a damaged file, anything else is the wrong type.
     throw new LogoError(looksLikeImage(file.bytes) ? 'CORRUPT' : 'BAD_TYPE');
@@ -97,15 +98,16 @@ export async function processLogo(
   try {
     const input =
       format === 'svg'
-        ? // librsvg renders at 72 dpi by default; raise the density so the raster is crisp at 2000 px.
+        ? // librsvg renders at 72 dpi by default; pick the density that puts the longest side near
+          // 2000 px (crisp, and a huge declared size is never rasterized at full size).
           sharp(file.bytes, {
-            density: Math.min(2400, Math.max(72, (72 * MAX_LOGO_WIDTH) / Math.max(1, width ?? MAX_LOGO_WIDTH))),
+            density: Math.min(2400, Math.max(1, (72 * MAX_LOGO_WIDTH) / longest)),
             limitInputPixels: MAX_INPUT_PIXELS * 4,
           })
         : sharp(file.bytes, { limitInputPixels: MAX_INPUT_PIXELS, failOn: 'error' });
     png = await input
       .rotate() // honor EXIF orientation before the metadata is dropped
-      .resize({ width: MAX_LOGO_WIDTH, withoutEnlargement: true })
+      .resize({ width: MAX_LOGO_WIDTH, height: MAX_LOGO_WIDTH, fit: 'inside', withoutEnlargement: true })
       .png({ compressionLevel: 9 })
       .toBuffer();
   } catch (e) {
@@ -119,7 +121,6 @@ export async function processLogo(
   const abs = resolveLogoPath(rel)!;
   await mkdir(path.dirname(abs), { recursive: true });
   await writeFile(abs, png);
-  if (opts.replaces && opts.replaces !== rel) await deleteLogo(opts.replaces);
   return { path: rel, palette };
 }
 

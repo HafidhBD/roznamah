@@ -23,13 +23,20 @@ const NATIONAL = 'اليوم الوطني';
 const LOGO = path.join(__dirname, '../fixtures/logo.png');
 
 async function seed(page: Page, titles: string[]) {
-  const patch = await page.request.patch('/api/draft', { data: { startMonth: START } });
+  const patch = await page.request.patch('/api/draft', {
+    data: { startMonth: START },
+  });
   expect(patch.ok()).toBeTruthy();
   if (titles.length) {
     const recs = await page.request.post('/api/recommendations', {
-      data: { selections: { sector: null, fields: [], audiences: [], uses: [] }, startMonth: START },
+      data: {
+        selections: { sector: null, fields: [], audiences: [], uses: [] },
+        startMonth: START,
+      },
     });
-    const { items } = (await recs.json()) as { items: { eventId: string; titleAr: string }[] };
+    const { items } = (await recs.json()) as {
+      items: { eventId: string; titleAr: string }[];
+    };
     const eventIds = titles.map((t) => items.find((i) => i.titleAr === t)!.eventId);
     expect((await page.request.post('/api/draft/events', { data: { eventIds } })).ok()).toBeTruthy();
   }
@@ -106,13 +113,25 @@ test('studio: identity settings drive the live preview and persist', async ({ pa
 test('logo endpoint: rejects a fake image, serves only the owner', async ({ page, browser }) => {
   await seed(page, []);
   const fake = await page.request.post('/api/draft/logo', {
-    multipart: { file: { name: 'evil.png', mimeType: 'image/png', buffer: Buffer.from('MZ not an image at all') } },
+    multipart: {
+      file: {
+        name: 'evil.png',
+        mimeType: 'image/png',
+        buffer: Buffer.from('MZ not an image at all'),
+      },
+    },
   });
   expect(fake.status()).toBe(400);
   expect((await fake.json()).error).toBe('BAD_TYPE');
 
   const ok = await page.request.post('/api/draft/logo', {
-    multipart: { file: { name: 'logo.png', mimeType: 'image/png', buffer: require('node:fs').readFileSync(LOGO) } },
+    multipart: {
+      file: {
+        name: 'logo.png',
+        mimeType: 'image/png',
+        buffer: require('node:fs').readFileSync(LOGO),
+      },
+    },
   });
   expect(ok.ok()).toBeTruthy();
   const body = await ok.json();
@@ -129,7 +148,9 @@ test('logo endpoint: rejects a fake image, serves only the owner', async ({ page
   await other.close();
 
   // the logo path cannot be written through the design PATCH
-  const patch = await page.request.patch('/api/draft', { data: { design: { logoPath: 'x/y.png' } } });
+  const patch = await page.request.patch('/api/draft', {
+    data: { design: { logoPath: 'x/y.png' } },
+  });
   expect(patch.status()).toBe(400);
 });
 
@@ -140,4 +161,103 @@ test('studio has no horizontal overflow at 390px', async ({ page }) => {
   await expect(preview(page).locator('[data-waves-stamp]')).toBeVisible();
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth);
   expect(overflow).toBe(false);
+});
+
+const LONG_AR = 'مؤسسة '.repeat(20).slice(0, 120);
+const LONG_EN = 'Organization '.repeat(10).slice(0, 120);
+
+/** Every label in a day cell is whole (not cut by the cell) and the «+N» line lies inside the cell. */
+async function cellsAreWhole(page: Page) {
+  return page.evaluate(() => {
+    const problems: string[] = [];
+    let more = 0;
+    for (const cell of document.querySelectorAll<HTMLElement>(
+      '[data-testid="preview"] [data-page="month"] [data-date]',
+    )) {
+      const box = cell.getBoundingClientRect();
+      const list = cell.querySelector('.rz-cell-events');
+      if (list) {
+        const lb = list.getBoundingClientRect();
+        for (const ev of list.querySelectorAll('.rz-ev')) {
+          if (ev.getBoundingClientRect().bottom > lb.bottom + 0.5) problems.push(`cut label in ${cell.dataset.date}`);
+        }
+      }
+      const m = cell.querySelector('.rz-more');
+      if (m) {
+        more++;
+        const r = m.getBoundingClientRect();
+        if (r.top < box.top || r.bottom > box.bottom + 0.5) problems.push(`+N outside ${cell.dataset.date}`);
+      }
+    }
+    for (const sel of ['.rzm-org', '.rzo-org']) {
+      const el = document.querySelector<HTMLElement>(`[data-testid="preview"] ${sel}`);
+      const area = el?.closest('.rzm-band, .rzo-head');
+      if (el && area && el.getBoundingClientRect().bottom > area.getBoundingClientRect().bottom + 0.5)
+        problems.push(`${sel} spills`);
+    }
+    return { problems, more };
+  });
+}
+
+test.describe('dense pages', () => {
+  test.use({ deviceScaleFactor: 2 });
+  test('dense bilingual month: cells never cut an occasion or the +N line', async ({ page }) => {
+    test.setTimeout(60_000);
+    await seed(page, []);
+    const design = {
+      language: 'bi',
+      showDescriptions: true,
+      notesArea: true,
+      orgNameAr: LONG_AR,
+      orgNameEn: LONG_EN,
+    };
+    expect((await page.request.patch('/api/draft', { data: { design } })).ok()).toBeTruthy();
+    const sql = postgres(process.env.DATABASE_URL!);
+    const june = await sql<
+      { id: string }[]
+    >`select id from events where active and recurrence = 'gregorian_fixed' and g_month = 6`;
+    await sql.end();
+    expect(june.length).toBeGreaterThanOrEqual(8);
+    expect(
+      (
+        await page.request.post('/api/draft/events', {
+          data: { eventIds: june.map((r) => r.id) },
+        })
+      ).ok(),
+    ).toBeTruthy();
+    for (let i = 1; i <= 5; i++) {
+      const custom = {
+        titleAr: `اجتماع مجلس الإدارة رقم ${i}`,
+        titleEn: `Board meeting number ${i}`,
+        date: '2027-06-10',
+      };
+      expect((await page.request.post('/api/draft/events', { data: { custom } })).ok()).toBeTruthy();
+    }
+
+    await page.setViewportSize({ width: 1366, height: 900 });
+    await page.goto('/studio');
+    await goToPage(page, 6);
+    await expect(preview(page).locator('[data-date="2027-06-10"] .rz-more')).toBeVisible();
+    for (const template of ['modern', 'official'] as const) {
+      await page.getByTestId(`template-${template}`).click();
+      await expect(preview(page).locator('[data-template]')).toHaveAttribute('data-template', template);
+      const { problems, more } = await cellsAreWhole(page);
+      expect(problems).toEqual([]);
+      expect(more).toBeGreaterThan(0);
+      if (process.env.SHOT_DIR) {
+        await preview(page).screenshot({
+          path: path.join(process.env.SHOT_DIR, `task-9-dense-bi-${template}.png`),
+        });
+      }
+    }
+    // taller cells (no descriptions list, no notes area) show more labels, still whole
+    for (const toggle of ['toggle-descriptions', 'toggle-notes']) {
+      await page.getByTestId(toggle).uncheck();
+      for (const template of ['modern', 'official'] as const) {
+        await page.getByTestId(`template-${template}`).click();
+        expect((await cellsAreWhole(page)).problems).toEqual([]);
+      }
+    }
+    await savedState(page);
+  });
 });

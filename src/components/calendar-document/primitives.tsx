@@ -93,30 +93,66 @@ export function DayNumbers({ ctx, iso }: { ctx: DocContext; iso: string }) {
   );
 }
 
-export const MAX_PER_CELL = 3;
+/*
+ * Day-cell budget, in mm: the height under the day numbers, measured on the A4 artboard with a full
+ * descriptions list (8 items), minus a 1.5 mm safety margin. Occasions are laid out to fit it, so
+ * the printed cell never cuts a label in half; the «+N» line sits outside the clipped area.
+ * (Measured: modern 16.3 / official 19.8 with descriptions and notes on; the list adds ~7.4, the
+ * notes area ~3.8.) tests/e2e/studio.spec.ts checks the densest case renders whole labels.
+ */
+export function cellBudgetMm(design: Design): number {
+  const base = design.template === 'official' ? 19.8 : 16.3;
+  return base + (design.showDescriptions ? 0 : 7.4) + (design.notesArea ? 0 : 3.8) - 1.5;
+}
+const TITLE_LINE_MM = 2.75; // 6.1pt × 1.28
+const SECOND_LINE_MM = 2.4; // 5.3pt × 1.28
+const GAP_MM = 0.6;
+const MORE_MM = 2.6;
+
+export type CellLayout = { shown: number; clamps: number[]; more: number };
+
+/** How many occasions a cell shows, and how many title lines each may use. */
+export function cellLayout(count: number, bilingual: boolean, variant: 'pill' | 'line', budget: number): CellLayout {
+  const pad = variant === 'pill' ? 1 : 0.2;
+  const cost = pad + TITLE_LINE_MM + (bilingual ? SECOND_LINE_MM : 0) + GAP_MM;
+  const fit = Math.max(1, Math.floor((budget + GAP_MM) / cost));
+  const shown = count <= fit ? count : Math.max(1, Math.floor((budget - MORE_MM) / cost));
+  const more = count - shown;
+  let spare = budget + GAP_MM - shown * cost - (more ? MORE_MM + GAP_MM : 0);
+  const clamps = Array.from({ length: shown }, () => {
+    if (spare >= TITLE_LINE_MM) {
+      spare -= TITLE_LINE_MM;
+      return 2;
+    }
+    return 1;
+  });
+  return { shown, clamps, more };
+}
 
 /** An occasion inside a day cell: a filled pill (modern) or a marked line (official). */
 export function EventLabel({
   ctx,
   ev,
   variant,
-  compact,
+  lines,
 }: {
   ctx: DocContext;
   ev: SnapshotEvent;
   variant: 'pill' | 'line';
-  compact: boolean;
+  /** Title lines this label may use (1 or 2). */
+  lines: number;
 }) {
   const color = ctx.colorOf(ev);
   const estimated = ev.status === 'estimated';
   const style = {
     '--ev': color,
     '--ev-ink': readableOn(color),
+    '--clamp': lines,
   } as CSSProperties;
   const second = ctx.langs.second ? eventTitle(ev, ctx.langs.second) : null;
   return (
     <div
-      className={`rz-ev rz-ev-${variant} ${estimated ? 'is-estimated' : ''} ${compact ? 'is-compact' : ''}`}
+      className={`rz-ev rz-ev-${variant} ${estimated ? 'is-estimated' : ''}`}
       style={style}
       data-status={ev.status}
     >
@@ -134,21 +170,23 @@ export function EventLabel({
   );
 }
 
+/** A day's occasions: whole labels that fit the cell, then a never-clipped «+N» line. */
 export function CellEvents({ ctx, events, variant }: { ctx: DocContext; events: SnapshotEvent[]; variant: 'pill' | 'line' }) {
   if (!events.length) return null;
-  const shown = events.slice(0, MAX_PER_CELL);
-  const compact = events.length >= MAX_PER_CELL;
+  const { shown, clamps, more } = cellLayout(events.length, !!ctx.langs.second, variant, cellBudgetMm(ctx.design));
   return (
-    <div className="rz-cell-events">
-      {shown.map((ev) => (
-        <EventLabel key={`${ev.id}-${ev.start}`} ctx={ctx} ev={ev} variant={variant} compact={compact} />
-      ))}
-      {events.length > MAX_PER_CELL && (
+    <>
+      <div className="rz-cell-events">
+        {events.slice(0, shown).map((ev, i) => (
+          <EventLabel key={`${ev.id}-${ev.start}`} ctx={ctx} ev={ev} variant={variant} lines={clamps[i]} />
+        ))}
+      </div>
+      {more > 0 && (
         <span className="rz-more">
-          +{events.length - MAX_PER_CELL} {ctx.t('doc.more')}
+          +{more} {ctx.t('doc.more')}
         </span>
       )}
-    </div>
+    </>
   );
 }
 

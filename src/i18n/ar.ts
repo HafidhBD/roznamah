@@ -146,6 +146,8 @@ export const ar = {
   'doc.defaultTitle': 'تقويم المناسبات {year}',
   'doc.dowInitials': 'ح,ن,ث,ر,خ,ج,س',
   'doc.perMonth': 'عدد المناسبات في كل شهر',
+  'doc.hijriRangeSuffix': '',
+  'doc.hijriEra': 'هـ',
   'doc.notes': 'ملاحظات',
   'doc.estimated': 'تاريخ تقديري وفق تقويم أم القرى',
   'doc.occasions': 'مناسبات الشهر',

@@ -47,7 +47,7 @@ export function hijriRange(l: Lang, year: number, month0: number): string {
   const last = noon(year, month0 + 1, 0);
   const a = toHijri(first);
   const b = toHijri(last);
-  const suffix = l === 'ar' ? '' : ' AH';
+  const suffix = t(l, 'doc.hijriRangeSuffix');
   if (a.year === b.year && a.month === b.month) return `${hijriMonthName(l, first)} ${a.year}${suffix}`;
   if (a.year === b.year) return `${hijriMonthName(l, first)} – ${hijriMonthName(l, last)} ${a.year}${suffix}`;
   return `${hijriMonthName(l, first)} ${a.year} – ${hijriMonthName(l, last)} ${b.year}${suffix}`;

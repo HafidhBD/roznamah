@@ -148,7 +148,7 @@ function Cover({ ctx }: CoverProps) {
         )}
         {design.showHijri && (
           <p className="rzo-cover-hijri">
-            {h0 === h1 ? h0 : `${h0} – ${h1}`} {langs.main === 'ar' ? 'هـ' : 'AH'}
+            {h0 === h1 ? h0 : `${h0} – ${h1}`} {ctx.t('doc.hijriEra')}
           </p>
         )}
         <Ornament />

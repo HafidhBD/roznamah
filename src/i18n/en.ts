@@ -150,6 +150,8 @@ export const en: Messages = {
   'doc.defaultTitle': 'Occasions Calendar {year}',
   'doc.dowInitials': 'Su,Mo,Tu,We,Th,Fr,Sa',
   'doc.perMonth': 'Occasions per month',
+  'doc.hijriRangeSuffix': ' AH',
+  'doc.hijriEra': 'AH',
   'doc.notes': 'Notes',
   'doc.estimated': 'Estimated date (Umm al-Qura)',
   'doc.occasions': 'This month',

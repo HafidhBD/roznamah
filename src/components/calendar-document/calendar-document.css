@@ -12,6 +12,23 @@
   -webkit-print-color-adjust: exact;
   print-color-adjust: exact;
   text-rendering: optimizeLegibility;
+  overflow-wrap: anywhere;
+}
+/* Free text (names, title, subtitle; up to 120 chars) never spills out of its area. */
+.rzm-org,
+.rzm-cover-org,
+.rzm-cover-org2,
+.rzm-cover-title,
+.rzm-cover-subtitle,
+.rzo-org,
+.rzo-cover-org,
+.rzo-cover-org2,
+.rzo-cover-title,
+.rzo-cover-subtitle {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
 }
 .rz-doc *,
 .rz-doc *::before,
@@ -85,10 +102,15 @@
   white-space: nowrap;
 }
 .rz-cell-events {
+  flex: 1 1 auto;
   display: flex;
   flex-direction: column;
   gap: 0.6mm;
   min-height: 0;
+  overflow: hidden;
+}
+.rz-cell-events > .rz-ev {
+  flex: none;
 }
 .rz-ev {
   display: flex;
@@ -106,11 +128,8 @@
 .rz-ev-title {
   display: -webkit-box;
   -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
+  -webkit-line-clamp: var(--clamp, 2);
   overflow: hidden;
-}
-.rz-ev.is-compact .rz-ev-title {
-  -webkit-line-clamp: 1;
 }
 .rz-ev-title2 {
   font-size: 5.3pt;
@@ -152,6 +171,10 @@
   color: var(--ev);
 }
 .rz-more {
+  flex: none;
+  display: block;
+  line-height: 1.3;
+  white-space: nowrap;
   font-size: 5.6pt;
   font-weight: 700;
   color: var(--p);
@@ -302,6 +325,10 @@
   inset-inline-end: -22mm;
   top: -30mm;
   background: var(--s);
+}
+/* without a logo card on it, the org name would sit on the orb: keep only the ring */
+.rzm-band:not(.has-logo) .rzm-orb-a {
+  display: none;
 }
 .rzm-orb-b {
   width: 40mm;

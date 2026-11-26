@@ -68,22 +68,31 @@ export async function POST(req: Request) {
 
   const draft = (await draftFromRequest(req, true))!;
   const { calendar } = draft;
+  const previous = ownLogoPath(calendar.id, calendar.design.logoPath);
+  let out: Awaited<ReturnType<typeof processLogo>>;
   try {
-    const out = await processLogo(
+    out = await processLogo(
       { bytes: Buffer.from(await file.arrayBuffer()), mime: file.type, name: file.name },
-      { calendarId: calendar.id, replaces: ownLogoPath(calendar.id, calendar.design.logoPath) },
+      { calendarId: calendar.id },
     );
-    await db
-      .update(calendars)
-      .set({ design: setLogoPath(out.path), updatedAt: new Date() })
-      .where(eq(calendars.id, calendar.id));
-    return withDraftCookie(NextResponse.json({ logoUrl: logoUrlFor(out.path), palette: out.palette }), draft);
   } catch (e) {
     if (e instanceof LogoError) {
       return withDraftCookie(NextResponse.json({ error: e.code }, { status: errorStatus[e.code] }), draft);
     }
     throw e;
   }
+  try {
+    await db
+      .update(calendars)
+      .set({ design: setLogoPath(out.path), updatedAt: new Date() })
+      .where(eq(calendars.id, calendar.id));
+  } catch (e) {
+    await deleteLogo(out.path); // the new file is not referenced; the old one stays in use
+    throw e;
+  }
+  // Only now that the new path is saved is the old file unreferenced.
+  if (previous && previous !== out.path) await deleteLogo(previous);
+  return withDraftCookie(NextResponse.json({ logoUrl: logoUrlFor(out.path), palette: out.palette }), draft);
 }
 
 export async function DELETE(req: Request) {

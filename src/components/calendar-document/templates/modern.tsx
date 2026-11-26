@@ -42,7 +42,7 @@ function Month({ ctx, month, index }: MonthProps) {
   const weeks = gridDays(month);
   return (
     <>
-      <header className="rzm-band">
+      <header className={`rzm-band ${ctx.logo ? 'has-logo' : ''}`}>
         <div className="rzm-band-bg" aria-hidden>
           <span className="rzm-orb rzm-orb-a" />
           <span className="rzm-orb rzm-orb-b" />

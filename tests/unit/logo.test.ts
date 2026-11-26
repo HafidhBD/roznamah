@@ -85,19 +85,30 @@ describe('processLogo', () => {
     expect(deltaE(out.palette[0], '#0a7f5a')).toBeLessThan(10);
   });
 
-  it('re-encodes a JPEG (stripping metadata) and deletes the replaced file', async () => {
+  it('re-encodes a JPEG, stripping metadata', async () => {
     const jpg = await sharp({ create: { width: 80, height: 80, channels: 3, background: '#336699' } })
       .withMetadata({ exif: { IFD0: { Copyright: 'secret-exif' } } })
       .jpeg()
       .toBuffer();
-    const first = await logo.processLogo({ bytes: jpg, mime: 'image/jpeg', name: 'a.jpg' }, { calendarId: CAL });
-    const stored = readFileSync(path.join(dir, first.path));
+    const out = await logo.processLogo({ bytes: jpg, mime: 'image/jpeg', name: 'a.jpg' }, { calendarId: CAL });
+    const stored = readFileSync(path.join(dir, out.path));
     expect(stored.includes('secret-exif')).toBe(false);
     expect(['png', 'webp']).toContain((await sharp(stored).metadata()).format);
+  });
 
-    const second = await logo.processLogo({ bytes: jpg, mime: 'image/jpeg', name: 'b.jpg' }, { calendarId: CAL, replaces: first.path });
-    expect(second.path).not.toBe(first.path);
-    expect(() => readFileSync(path.join(dir, first.path))).toThrow();
+  it('caps an SVG raster at 2000 px on both axes (a very tall SVG)', async () => {
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="16000"><rect width="1000" height="16000" fill="#123456"/></svg>`;
+    const out = await logo.processLogo({ bytes: Buffer.from(svg), mime: 'image/svg+xml', name: 'tall.svg' }, { calendarId: CAL });
+    const meta = await sharp(readFileSync(path.join(dir, out.path))).metadata();
+    expect(meta.height).toBeLessThanOrEqual(2000);
+    expect(meta.width).toBeLessThanOrEqual(2000);
+  });
+
+  it('caps a raster at 2000 px on both axes', async () => {
+    const tall = await sharp({ create: { width: 300, height: 4000, channels: 3, background: '#445566' } }).png().toBuffer();
+    const out = await logo.processLogo({ bytes: tall, mime: 'image/png', name: 'tall.png' }, { calendarId: CAL });
+    const meta = await sharp(readFileSync(path.join(dir, out.path))).metadata();
+    expect(meta.height).toBeLessThanOrEqual(2000);
   });
 
   it('refuses to read or delete paths outside the upload dir', async () => {
