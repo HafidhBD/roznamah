@@ -36,6 +36,13 @@ describe('download email', () => {
     expect(outbox).toHaveLength(0);
   });
 
+  it('production without EMAIL_FROM fails clearly instead of sending from a placeholder', async () => {
+    vi.stubEnv('NODE_ENV', 'production');
+    vi.stubEnv('RESEND_API_KEY', 're_test');
+    vi.stubEnv('EMAIL_FROM', '');
+    await expect(sendDownloadEmail('a@b.sa', 'ar', 'https://x/download/t', 'Org')).rejects.toThrow('EMAIL_FROM is not set');
+  });
+
   it('control characters never reach the subject', () => {
     expect(downloadEmail('ar', 'https://x/download/t', 'Org\r\nBcc: x@evil.test').subject).toBe('تقويم OrgBcc: x@evil.test جاهز للتحميل');
   });

@@ -7,6 +7,7 @@ import { redirect } from 'next/navigation';
 import { db } from '@/db/client';
 import { accounts, sessions, users, verificationTokens } from '@/db/schema';
 import { t } from '@/i18n/core';
+import { emailFrom } from '@/lib/email';
 
 export function adminEmails(): string[] {
   return (process.env.ADMIN_EMAILS ?? '')
@@ -55,11 +56,12 @@ async function sendVerificationRequest({ identifier, url: rawUrl }: { identifier
     return;
   }
   if (!apiKey) throw new Error('RESEND_API_KEY is not set');
+  const from = emailFrom(); // throws in production when EMAIL_FROM is empty
   const res = await fetch('https://api.resend.com/emails', {
     method: 'POST',
     headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      from: process.env.EMAIL_FROM,
+      from,
       to: identifier,
       subject: t('ar', 'admin.email.subject'),
       html: `<div dir="rtl" style="font-family:sans-serif"><p>${t('ar', 'admin.email.body')}</p><p><a href="${escapeHtml(url)}">${t('ar', 'admin.email.cta')}</a></p></div>`,

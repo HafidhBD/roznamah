@@ -25,10 +25,16 @@ export const outboxExposed = () =>
   process.env.NODE_ENV !== 'production' && (process.env.NODE_ENV === 'test' || memoryTransport());
 
 const appUrl = () => (process.env.APP_URL || 'http://localhost:3000').replace(/\/+$/, '');
-const from = () => process.env.EMAIL_FROM || 'Roznamah <no-reply@example.com>';
+/** Sender address. Required in production: never send from a placeholder. */
+export function emailFrom(): string {
+  const v = process.env.EMAIL_FROM?.trim();
+  if (v) return v;
+  if (process.env.NODE_ENV === 'production') throw new Error('EMAIL_FROM is not set');
+  return 'Roznamah <no-reply@example.com>';
+}
 
 export async function sendEmail(msg: Omit<OutgoingEmail, 'from'>): Promise<void> {
-  const email: OutgoingEmail = { from: from(), ...msg, subject: stripControl(msg.subject) };
+  const email: OutgoingEmail = { from: emailFrom(), ...msg, subject: stripControl(msg.subject) };
   if (process.env.EMAIL_TRANSPORT === 'memory' && !memoryTransport()) {
     console.warn('[email] EMAIL_TRANSPORT=memory is ignored in production');
   }
