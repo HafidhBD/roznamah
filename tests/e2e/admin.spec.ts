@@ -87,16 +87,18 @@ test('invalid event input is rejected with 400', async ({ page, baseURL }) => {
 });
 
 test('occurrence override: confirm a Hijri date from the editor', async ({ page, baseURL }) => {
+  // 2028 on purpose: other specs run in parallel on the same DB with 2027 spans and assert that Eid
+  // al-Fitr 2027 is 'estimated'; a temporary 2027 override made them flaky.
   await signInAs(page, adminToken, baseURL);
   await page.goto('/admin/events?q=eid-al-fitr');
   await page.getByTestId('edit-eid-al-fitr').click();
-  await page.getByTestId('occ-year').selectOption('2027');
-  await page.getByTestId('occ-date').fill('2027-03-10');
+  await page.getByTestId('occ-year').selectOption('2028');
+  await page.getByTestId('occ-date').fill('2028-02-27');
   await page.getByTestId('occ-status').selectOption('confirmed');
   await page.getByTestId('occ-save').click();
   await expect(page.getByTestId('occ-status-msg')).toHaveText('تم حفظ التاريخ');
   try {
-    await expect(page.getByTestId('occ-row-2027')).toContainText('2027-03-10 (مؤكد)');
+    await expect(page.getByTestId('occ-row-2028')).toContainText('2028-02-27 (مؤكد)');
   } finally {
     await page.getByTestId('occ-remove').click();
     await expect(page.getByTestId('occ-status-msg')).toHaveText('تم حفظ التاريخ');
