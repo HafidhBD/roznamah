@@ -71,6 +71,21 @@ describe('draft API', () => {
     expect(await resolveDraft('forged-token-value', { create: false })).toBeNull();
   });
 
+  it('malformed cookies are treated as missing, not a 500', async () => {
+    const res = await GET(req('GET', '/api/draft', '%E0%A4%A'));
+    expect(res.status).toBe(200);
+    tokens.push(res.cookies.get('rz_draft')!.value);
+    expect(res.headers.get('set-cookie')).toMatch(/rz_draft=/);
+    const { token } = await fresh();
+    const [id] = await someEvents(1);
+    await postEvent(req('POST', '/api/draft/events', token, { eventIds: [id] }));
+    const lang = await GET(req('GET', '/api/draft', token, undefined, 'rz_lang=%E0%A4%A'));
+    expect(lang.status).toBe(200);
+    const ev = (await lang.json()).events[0];
+    const [row] = await db.select().from(events).where(eq(events.id, id));
+    expect(ev.title).toBe(row.titleAr);
+  });
+
   it('rejects an invalid design color and leaves the design unchanged', async () => {
     const { token } = await fresh();
     const bad = await PATCH(req('PATCH', '/api/draft', token, { design: { primary: 'red' } }));

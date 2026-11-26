@@ -163,7 +163,14 @@ export const inSpan = (calendar: CalendarRow, iso: string) =>
 function cookieFrom(req: Request, name: string): string | undefined {
   for (const part of (req.headers.get('cookie') ?? '').split(';')) {
     const i = part.indexOf('=');
-    if (i > 0 && part.slice(0, i).trim() === name) return decodeURIComponent(part.slice(i + 1).trim());
+    if (i > 0 && part.slice(0, i).trim() === name) {
+      const raw = part.slice(i + 1).trim();
+      try {
+        return decodeURIComponent(raw);
+      } catch {
+        return undefined; // malformed percent-encoding: treat as no cookie
+      }
+    }
   }
   return undefined;
 }
