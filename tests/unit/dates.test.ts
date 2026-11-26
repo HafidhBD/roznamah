@@ -101,6 +101,15 @@ describe('resolveOccurrences', () => {
       { eventId: 'ramadan-start', start: '2028-01-29', end: '2028-01-29', status: 'confirmed' },
     ]);
   });
+  it('consumes an override once when a year has two occurrences', () => {
+    const o = occ({ eventId: 'ramadan-start', year: 2030, startDate: '2030-01-06' });
+    expect(
+      resolveOccurrences(ramadan, [o], '2030-01-01', 12).map((r) => [r.start, r.status]),
+    ).toEqual([
+      ['2030-01-06', 'confirmed'],
+      ['2030-12-26', 'estimated'],
+    ]);
+  });
   it('override row status wins', () => {
     const o = occ({ eventId: 'ramadan-start', year: 2028, startDate: '2028-01-29', status: 'estimated' });
     expect(resolveOccurrences(ramadan, [o], '2027-03-01', 12)[0].status).toBe('estimated');

@@ -61,12 +61,27 @@ export function resolveOccurrences(
       for (let hy = h0; hy <= h1; hy++) computed.push(toIso(hijriToGregorian(hy, event.hMonth, event.hDay)));
     }
     const isHijri = event.recurrence === 'hijri_fixed';
-    for (const start of computed) {
-      const override = mine.find((o) => o.year === parseIso(start).getUTCFullYear());
-      const final = override ? override.startDate : start;
-      if (!inSpan(final)) continue;
-      result.push(make(final, override ? override.status : isHijri ? 'estimated' : 'confirmed'));
+    // Each override row replaces at most one computed occurrence: the nearest one in its year.
+    const overrideFor = new Map<number, OccurrenceRow>();
+    for (const o of mine) {
+      let best = -1;
+      let bestDist = Infinity;
+      computed.forEach((c, i) => {
+        if (overrideFor.has(i) || parseIso(c).getUTCFullYear() !== o.year) return;
+        const dist = Math.abs(parseIso(c).getTime() - parseIso(o.startDate).getTime());
+        if (dist < bestDist) {
+          best = i;
+          bestDist = dist;
+        }
+      });
+      if (best >= 0) overrideFor.set(best, o);
     }
+    computed.forEach((start, i) => {
+      const override = overrideFor.get(i);
+      const final = override ? override.startDate : start;
+      if (!inSpan(final)) return;
+      result.push(make(final, override ? override.status : isHijri ? 'estimated' : 'confirmed'));
+    });
   }
   return result.sort((a, b) => a.start.localeCompare(b.start));
 }
