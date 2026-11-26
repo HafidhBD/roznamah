@@ -13,8 +13,10 @@ x-app-env: &app-env
   AUTH_SECRET: ${AUTH_SECRET:?set AUTH_SECRET}
   RENDER_SECRET: ${RENDER_SECRET:?set RENDER_SECRET}
   ADMIN_EMAILS: ${ADMIN_EMAILS:?set ADMIN_EMAILS}
-  RESEND_API_KEY: ${RESEND_API_KEY:-}
-  EMAIL_FROM: ${EMAIL_FROM:-}
+  RESEND_API_KEY: ${RESEND_API_KEY:?set RESEND_API_KEY (admin sign-in and download emails need it)}
+  EMAIL_FROM: ${EMAIL_FROM:?set EMAIL_FROM, e.g. Roznamah <no-reply@yourdomain> on a Resend-verified domain}
+  PRIVACY_EMAIL: ${PRIVACY_EMAIL:?set PRIVACY_EMAIL (shown on /privacy for data-deletion requests)}
+  # Turnstile: set BOTH for public launch (only one set = downloads fail closed and the app logs an error).
   TURNSTILE_SITE_KEY: ${TURNSTILE_SITE_KEY:-}
   TURNSTILE_SECRET_KEY: ${TURNSTILE_SECRET_KEY:-}
   LEAD_NOTIFY_EMAILS: ${LEAD_NOTIFY_EMAILS:-}
@@ -72,21 +74,31 @@ services:
       - traefik.http.routers.roznamah.entrypoints=websecure
       - traefik.http.routers.roznamah.tls=true
       - traefik.http.routers.roznamah.tls.certresolver=${TRAEFIK_CERTRESOLVER:-letsencrypt}
-      - traefik.http.routers.roznamah.middlewares=roznamah-body@docker
+      - traefik.http.routers.roznamah.middlewares=roznamah-headers@docker,roznamah-body@docker
       - traefik.http.services.roznamah.loadbalancer.server.port=3000
       # Logo uploads are capped at 5 MB in the app; 6 MB here leaves room for multipart overhead.
       - traefik.http.middlewares.roznamah-body.buffering.maxRequestBodyBytes=6291456
+      # Security headers: HSTS 1 year incl. subdomains, no framing, referrer policy, no MIME sniffing.
+      - traefik.http.middlewares.roznamah-headers.headers.stsSeconds=31536000
+      - traefik.http.middlewares.roznamah-headers.headers.stsIncludeSubdomains=true
+      - "traefik.http.middlewares.roznamah-headers.headers.contentSecurityPolicy=frame-ancestors 'none'"
+      - traefik.http.middlewares.roznamah-headers.headers.customFrameOptionsValue=DENY
+      - traefik.http.middlewares.roznamah-headers.headers.referrerPolicy=strict-origin-when-cross-origin
+      - traefik.http.middlewares.roznamah-headers.headers.contentTypeNosniff=true
 
   worker:
     image: ${IMAGE:?set IMAGE}
     restart: unless-stopped
-    environment: *app-env
+    environment:
+      <<: *app-env
+      # Chromium loads the print route (RENDER_SECRET in its query) over the internal network, never the public URL.
+      RENDER_BASE_URL: http://app:3000
     command: ["node", "worker/dist/index.js"]
     mem_limit: 2g
     init: true
     shm_size: 1gb
     healthcheck:
-      # worker/index.ts touches /tmp/worker-alive every 30s
+      # worker/index.ts touches /tmp/worker-alive after each successful pg-boss DB check (every 30s)
       test: ["CMD-SHELL", "test -n \"$$(find /tmp/worker-alive -mmin -2 2>/dev/null)\""]
       interval: 30s
       timeout: 5s
@@ -97,6 +109,8 @@ services:
     depends_on:
       migrate:
         condition: service_completed_successfully
+      app:
+        condition: service_healthy
 
   # Nightly pg_dump (03:00 UTC, custom format) into /data/backups, keeping 14 days.
   backup:

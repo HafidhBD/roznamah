@@ -7,7 +7,8 @@ Stack: `db` (Postgres 17) · `migrate` (one-shot: migrations + insert-only seed)
 ## 1. Prerequisites / المتطلبات
 
 - **Domain / النطاق:** DNS `A` record for `APP_HOST` -> `186.240.150.99`. Wait until it resolves before first start (Let's Encrypt needs it).
-- **Resend:** a verified sending domain; `EMAIL_FROM` on that domain (e.g. `Roznamah <no-reply@yourdomain>`), and `RESEND_API_KEY`.
+- **Resend (required):** a verified sending domain; `EMAIL_FROM` on that domain (e.g. `Roznamah <no-reply@yourdomain>`), and `RESEND_API_KEY`. `docker compose config` refuses to run without them, and the app/worker log `CONFIG ERROR` at startup if either is empty.
+- **PRIVACY_EMAIL (required):** the address shown on `/privacy` for data-deletion requests (e.g. `privacy@yourdomain`).
 - **ADMIN_EMAILS:** comma-separated, lowercase; only these can open `/admin`.
 - **Secrets / الأسرار:** generate each separately:
   ```bash
@@ -17,7 +18,9 @@ Stack: `db` (Postgres 17) · `migrate` (one-shot: migrations + insert-only seed)
   ```
 - **Traefik:** the existing Traefik runs in `network_mode: host` (entrypoints `web`/`websecure`, certresolver `letsencrypt`, ACME http challenge, `exposedbydefault=false`). It reaches `app` over the compose bridge network `roznamah_default`; there is no external Traefik network to join. If the certresolver name differs, set `TRAEFIK_CERTRESOLVER`. Ports 80/443 must be open for the HTTP challenge.
 - **Image:** pushed by GitHub Actions to `ghcr.io/<owner>/roznamah` (lowercase). If the package is private, `docker login ghcr.io` on the VPS with a read-only PAT (`read:packages`), or make the package public.
-- Optional: `TURNSTILE_SITE_KEY` / `TURNSTILE_SECRET_KEY`, `LEAD_NOTIFY_EMAILS`.
+- **Turnstile (required for public launch):** create a Cloudflare Turnstile widget for `APP_HOST` and set **both** `TURNSTILE_SITE_KEY` and `TURNSTILE_SECRET_KEY`. The site key is read at request time and server-rendered into the download dialog (no rebuild needed). Leaving both empty turns the check off (private testing only). Setting only one is a misconfiguration: the app logs `CONFIG ERROR` at startup and every download is refused (`captcha_failed`, logged as `[turnstile] refusing download`).
+- Optional: `LEAD_NOTIFY_EMAILS`.
+- **Render URL:** the worker's Chromium loads `/print/...?key=<RENDER_SECRET>` from `RENDER_BASE_URL`, set to `http://app:3000` in the compose file, so the secret stays on the internal network and never passes through Traefik or its access logs. The worker waits for `app` to be healthy before starting.
 
 ## 2. First deploy / النشر الأول
 
@@ -36,6 +39,9 @@ RENDER_SECRET=<base64>
 ADMIN_EMAILS=<a@x.com,b@x.com>
 RESEND_API_KEY=<key>
 EMAIL_FROM=Roznamah <no-reply@yourdomain>
+PRIVACY_EMAIL=privacy@yourdomain
+TURNSTILE_SITE_KEY=<site key>
+TURNSTILE_SECRET_KEY=<secret key>
 EOF
 chmod 600 .env
 docker compose config >/dev/null      # validates; fails loudly on a missing variable
@@ -83,7 +89,7 @@ docker compose start app worker
 
 ```bash
 docker compose logs -f app
-docker compose logs -f worker      # expects "worker ready"
+docker compose logs -f worker      # expects "[worker] listening for render-download"
 docker compose logs backup         # "backup ok: ..." each night
 docker compose ps
 ```
@@ -91,6 +97,9 @@ docker compose ps
 ## Notes
 
 - Uploads are limited to 5 MB in the app; Traefik buffering middleware `roznamah-body` caps request bodies at 6 MB.
+- Traefik middleware `roznamah-headers` (chained before `roznamah-body`) adds HSTS (1 year, includeSubDomains), `Content-Security-Policy: frame-ancestors 'none'` + `X-Frame-Options: DENY`, `Referrer-Policy: strict-origin-when-cross-origin` and `X-Content-Type-Options: nosniff`. Check with `curl -sI https://<domain>/`.
+- The worker healthcheck file `/tmp/worker-alive` is touched every 30 s only after pg-boss answers a query on the render queue; a worker that lost its database turns `unhealthy`. Look for `[worker] heartbeat:` errors in its log.
+- Startup lines `[app] CONFIG ERROR: ...` / `[worker] CONFIG ERROR: ...` name any missing or half-set variable.
 - Chromium runs without its sandbox (Playwright default in containers), relying on container isolation; `shm_size: 1gb` avoids shared-memory crashes.
 - `worker` runs with `mem_limit: 2g`, `init: true`, `shm_size: 1gb` for Chromium.
 - The `migrate` service runs `node worker/dist/migrate.js && node worker/dist/seed.js` (seed is insert-only; admin edits are never overwritten).
