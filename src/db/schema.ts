@@ -17,9 +17,10 @@ import {
   unique,
 } from 'drizzle-orm/pg-core';
 
+import type { Selections } from '@/lib/recommend';
+import type { Design } from '@/lib/design';
+
 // Placeholder jsonb types; later tasks will tighten them.
-export type Selections = Record<string, unknown>;
-export type Design = Record<string, unknown>;
 export type FormatRequest = Record<string, unknown>;
 export type CalendarSnapshot = unknown;
 
@@ -121,8 +122,8 @@ export const calendars = pgTable('calendars', {
   draftToken: text('draft_token').unique(),
   userId: text('user_id'),
   startMonth: date('start_month').notNull(),
-  selections: jsonb('selections').$type<Selections>().notNull().default({}),
-  design: jsonb('design').$type<Design>().notNull().default({}),
+  selections: jsonb('selections').$type<Selections>().notNull().default({} as Selections),
+  design: jsonb('design').$type<Design>().notNull().default({} as Design),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 });
