@@ -1,8 +1,8 @@
 # Roznamah production runbook / دليل النشر
 
-Stack: `db` (Postgres 17) · `migrate` (one-shot: migrations + insert-only seed) · `app` (Next.js, behind Traefik) · `worker` (PDF/Chromium, 2 GB) · `backup` (nightly `pg_dump`). Compose project name: `roznamah`. Only `app` joins the Traefik network; `db` is internal.
+Stack: `db` (Postgres 17) · `migrate` (one-shot: migrations + insert-only seed) · `app` (Next.js, behind Traefik) · `worker` (PDF/Chromium, 2 GB) · `backup` (nightly `pg_dump`). Compose project name: `roznamah`. `db` is internal; Traefik (host mode) reaches only `app` via the compose bridge.
 
-المكونات: قاعدة البيانات، ترحيل (مرة واحدة)، التطبيق خلف Traefik، عامل إنشاء PDF، ونسخ احتياطي ليلي. فقط `app` يتصل بشبكة Traefik.
+المكونات: قاعدة البيانات، ترحيل (مرة واحدة)، التطبيق خلف Traefik، عامل إنشاء PDF، ونسخ احتياطي ليلي. Traefik يعمل بنمط host ويصل إلى `app` عبر شبكة compose الداخلية.
 
 ## 1. Prerequisites / المتطلبات
 
@@ -15,7 +15,7 @@ Stack: `db` (Postgres 17) · `migrate` (one-shot: migrations + insert-only seed)
   openssl rand -base64 32   # RENDER_SECRET
   openssl rand -hex 24      # POSTGRES_PASSWORD (hex: safe inside the DB URL)
   ```
-- **Traefik network name / اسم شبكة Traefik:** read the real value from `/docker/traefik/docker-compose.yml` on the VPS (the network the Traefik service joins, and the certresolver name and `websecure` entrypoint used by the other projects). Set `TRAEFIK_NETWORK` and `TRAEFIK_CERTRESOLVER` accordingly; do not guess.
+- **Traefik:** the existing Traefik runs in `network_mode: host` (entrypoints `web`/`websecure`, certresolver `letsencrypt`, ACME http challenge, `exposedbydefault=false`). It reaches `app` over the compose bridge network `roznamah_default`; there is no external Traefik network to join. If the certresolver name differs, set `TRAEFIK_CERTRESOLVER`. Ports 80/443 must be open for the HTTP challenge.
 - **Image:** pushed by GitHub Actions to `ghcr.io/<owner>/roznamah` (lowercase). If the package is private, `docker login ghcr.io` on the VPS with a read-only PAT (`read:packages`), or make the package public.
 - Optional: `TURNSTILE_SITE_KEY` / `TURNSTILE_SECRET_KEY`, `LEAD_NOTIFY_EMAILS`.
 
@@ -29,8 +29,7 @@ mkdir -p /docker/roznamah && cd /docker/roznamah
 cat > .env <<'EOF'
 IMAGE=ghcr.io/<owner>/roznamah:latest
 APP_HOST=<domain>
-TRAEFIK_NETWORK=<name from /docker/traefik/docker-compose.yml>
-TRAEFIK_CERTRESOLVER=<resolver name, default letsencrypt>
+TRAEFIK_CERTRESOLVER=letsencrypt
 POSTGRES_PASSWORD=<hex>
 AUTH_SECRET=<base64>
 RENDER_SECRET=<base64>
@@ -92,5 +91,6 @@ docker compose ps
 ## Notes
 
 - Uploads are limited to 5 MB in the app; Traefik buffering middleware `roznamah-body` caps request bodies at 6 MB.
+- Chromium runs without its sandbox (Playwright default in containers), relying on container isolation; `shm_size: 1gb` avoids shared-memory crashes.
 - `worker` runs with `mem_limit: 2g`, `init: true`, `shm_size: 1gb` for Chromium.
 - The `migrate` service runs `node worker/dist/migrate.js && node worker/dist/seed.js` (seed is insert-only; admin edits are never overwritten).
