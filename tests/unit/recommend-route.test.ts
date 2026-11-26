@@ -31,6 +31,14 @@ describe('POST /api/recommendations', () => {
     expect((await call({ selections: {}, startMonth: '2027-01' })).status).toBe(400);
     expect((await call({ selections: sel, startMonth: '2027-13' })).status).toBe(400);
   });
+  it('returns 400 for a start year outside 2000-2100', async () => {
+    expect((await call({ selections: sel, startMonth: '1999-12-01' })).status).toBe(400);
+    expect((await call({ selections: sel, startMonth: '2101-01-01' })).status).toBe(400);
+    expect((await call({ selections: sel, startMonth: '9999-01' })).status).toBe(400);
+    expect((await call({ selections: sel, startMonth: '2000-01-01' })).status).toBe(200);
+    expect((await call({ selections: sel, startMonth: '2100-12' })).status).toBe(200);
+  });
+
   it('normalizes YYYY-MM like YYYY-MM-01', async () => {
     const a = await (await call({ selections: sel, startMonth: '2027-03' })).json();
     const b = await (await call({ selections: sel, startMonth: '2027-03-01' })).json();

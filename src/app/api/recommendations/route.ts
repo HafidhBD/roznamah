@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
+import { MAX_START_YEAR, MIN_START_YEAR, startYearInRange } from '@/lib/draft';
 import { recommend } from '@/lib/recommend';
 
 const keys = z.array(z.string().min(1).max(64)).max(50);
@@ -13,6 +14,7 @@ const bodySchema = z.object({
   startMonth: z
     .string()
     .regex(/^\d{4}-(0[1-9]|1[0-2])(-01)?$/)
+    .refine(startYearInRange, `year must be ${MIN_START_YEAR}-${MAX_START_YEAR}`)
     .transform((s) => `${s.slice(0, 7)}-01`),
 });
 
