@@ -1,22 +1,33 @@
 /**
- * Outgoing email. Transport: Resend (RESEND_API_KEY) by default; `EMAIL_TRANSPORT=memory` records
- * messages in an in-process outbox (tests / e2e, read via GET /api/test/outbox); without a key
- * outside production, messages are logged to the console so local dev still works.
+ * Outgoing email. Every message goes through one driver (src/lib/mail/env.ts):
+ * - `graph`: Microsoft 365 via Microsoft Graph sendMail (app-only token; MS_TENANT_ID, MS_CLIENT_ID,
+ *   MS_CLIENT_SECRET, sender MAIL_GRAPH_SENDER or the address in EMAIL_FROM). Graph sends as that
+ *   mailbox, so the display name recipients see is the mailbox's own, not the name in EMAIL_FROM.
+ * - `resend`: RESEND_API_KEY, From = EMAIL_FROM.
+ * - `memory` (MAIL_DRIVER=memory or EMAIL_TRANSPORT=memory): an in-process outbox (tests / e2e, read via
+ *   GET /api/test/outbox); never in production.
+ * Without any driver outside production, messages are logged to the console so local dev still works.
  */
+import { createHash } from 'node:crypto';
 import { Resend } from 'resend';
 import { t, type Lang } from '@/i18n/core';
 import type { FormatRequest, LeadRow } from '@/db/schema';
+import { GraphMailClient } from '@/lib/mail/graph-mail';
+import { graphBaseUrls, graphCreds, graphSender, mailDriver, memoryRequested, missingGraphCreds, saveToSent } from '@/lib/mail/env';
 
 export type OutgoingEmail = { from: string; to: string[]; subject: string; html: string; text: string };
 export type SentEmail = OutgoingEmail & { at: string };
 
-const globalForEmail = globalThis as unknown as { __roznamahOutbox?: SentEmail[]; __roznamahResend?: Resend };
+const globalForEmail = globalThis as unknown as {
+  __roznamahOutbox?: SentEmail[];
+  __roznamahResend?: { key: string; client: Resend };
+  __roznamahGraph?: { key: string; client: GraphMailClient };
+};
 /** In-memory outbox (one per server process; shared across route bundles via globalThis). */
 export const outbox: SentEmail[] = (globalForEmail.__roznamahOutbox ??= []);
 
-/** In-memory transport; never in production, whatever EMAIL_TRANSPORT says. */
-export const memoryTransport = () =>
-  process.env.EMAIL_TRANSPORT === 'memory' && process.env.NODE_ENV !== 'production';
+/** In-memory transport; never in production, whatever MAIL_DRIVER / EMAIL_TRANSPORT say. */
+export const memoryTransport = () => mailDriver() === 'memory';
 
 /** Removes control characters (C0 incl. CR/LF and tab, DEL, C1). */
 export const stripControl = (s: string) => s.replace(/[\u0000-\u001F\u007F-\u009F]/g, '');
@@ -33,24 +44,55 @@ export function emailFrom(): string {
   return 'Roznamah <no-reply@example.com>';
 }
 
+/** The Graph client for the current env, reused (with its cached token) while the config is unchanged. */
+function graphClient(): GraphMailClient {
+  const creds = graphCreds();
+  if (!creds) throw new Error(`MAIL_DRIVER=graph needs ${missingGraphCreds().join(', ')}`);
+  const sender = graphSender();
+  if (!sender) throw new Error('MAIL_DRIVER=graph needs MAIL_GRAPH_SENDER (or an address in EMAIL_FROM)');
+  const cfg = { ...creds, sender, saveToSentItems: saveToSent(), ...graphBaseUrls() };
+  // Hash so the secret is not kept as a readable cache key.
+  const key = createHash('sha256').update(JSON.stringify(cfg)).digest('hex');
+  const cached = globalForEmail.__roznamahGraph;
+  if (cached?.key === key) return cached.client;
+  const client = new GraphMailClient(cfg);
+  globalForEmail.__roznamahGraph = { key, client };
+  return client;
+}
+
+function resendClient(): Resend {
+  const key = process.env.RESEND_API_KEY?.trim();
+  if (!key) throw new Error('RESEND_API_KEY is not set');
+  const cached = globalForEmail.__roznamahResend;
+  if (cached?.key === key) return cached.client;
+  const client = new Resend(key);
+  globalForEmail.__roznamahResend = { key, client };
+  return client;
+}
+
 export async function sendEmail(msg: Omit<OutgoingEmail, 'from'>): Promise<void> {
   const email: OutgoingEmail = { from: emailFrom(), ...msg, subject: stripControl(msg.subject) };
-  if (process.env.EMAIL_TRANSPORT === 'memory' && !memoryTransport()) {
-    console.warn('[email] EMAIL_TRANSPORT=memory is ignored in production');
+  if (memoryRequested() && process.env.NODE_ENV === 'production') {
+    console.warn('[email] memory transport (MAIL_DRIVER / EMAIL_TRANSPORT) is ignored in production');
   }
-  if (memoryTransport()) {
+  const driver = mailDriver();
+  if (driver === 'memory') {
     outbox.push({ ...email, at: new Date().toISOString() });
     return;
   }
-  const key = process.env.RESEND_API_KEY;
-  if (!key) {
-    if (process.env.NODE_ENV === 'production') throw new Error('RESEND_API_KEY is not set');
-    console.info(`[email] (no RESEND_API_KEY) to=${email.to.join(',')} subject=${email.subject}\n${email.text}`);
+  if (driver === 'graph') {
+    await graphClient().send({ to: email.to, subject: email.subject, html: email.html, text: email.text });
     return;
   }
-  const resend = (globalForEmail.__roznamahResend ??= new Resend(key));
-  const { error } = await resend.emails.send(email);
-  if (error) throw new Error(`resend: ${error.name}: ${error.message}`);
+  if (driver === 'resend') {
+    const { error } = await resendClient().emails.send(email);
+    if (error) throw new Error(`resend: ${error.name}: ${error.message}`);
+    return;
+  }
+  if (process.env.NODE_ENV === 'production') {
+    throw new Error('no email driver: set MS_TENANT_ID, MS_CLIENT_ID and MS_CLIENT_SECRET (Microsoft 365), or RESEND_API_KEY');
+  }
+  console.info(`[email] (no email driver) to=${email.to.join(',')} subject=${email.subject}\n${email.text}`);
 }
 
 const escapeHtml = (s: string) =>

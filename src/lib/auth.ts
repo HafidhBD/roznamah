@@ -7,7 +7,8 @@ import { redirect } from 'next/navigation';
 import { db } from '@/db/client';
 import { accounts, sessions, users, verificationTokens } from '@/db/schema';
 import { t } from '@/i18n/core';
-import { emailFrom } from '@/lib/email';
+import { sendEmail } from '@/lib/email';
+import { mailDriver } from '@/lib/mail/env';
 
 export function adminEmails(): string[] {
   return (process.env.ADMIN_EMAILS ?? '')
@@ -25,7 +26,7 @@ export const SESSION_COOKIES = ['authjs.session-token', '__Secure-authjs.session
 export type AdminSession = { user: { id: string; email: string; name: string | null }; expires: Date };
 
 declare global {
-  // Magic links captured instead of emailed (EMAIL_TRANSPORT=memory / no RESEND_API_KEY, non-production only).
+  // Magic links captured instead of emailed (memory driver / no email driver, non-production only).
   var __roznamahMail: { to: string; url: string }[] | undefined;
 }
 
@@ -49,26 +50,19 @@ async function sendVerificationRequest({ identifier, url: rawUrl }: { identifier
   const parsed = new URL(rawUrl);
   const url = `${appOrigin()}${parsed.pathname}${parsed.search}`;
   const dev = process.env.NODE_ENV !== 'production';
-  const apiKey = process.env.RESEND_API_KEY;
-  if (dev && (process.env.EMAIL_TRANSPORT === 'memory' || !apiKey)) {
+  const driver = mailDriver();
+  if (dev && (driver === 'memory' || driver === null)) {
     (globalThis.__roznamahMail ??= []).push({ to: identifier, url });
     console.log(`[auth] magic link for ${identifier}: ${url}`);
     return;
   }
-  if (!apiKey) throw new Error('RESEND_API_KEY is not set');
-  const from = emailFrom(); // throws in production when EMAIL_FROM is empty
-  const res = await fetch('https://api.resend.com/emails', {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      from,
-      to: identifier,
-      subject: t('ar', 'admin.email.subject'),
-      html: `<div dir="rtl" style="font-family:sans-serif"><p>${t('ar', 'admin.email.body')}</p><p><a href="${escapeHtml(url)}">${t('ar', 'admin.email.cta')}</a></p></div>`,
-      text: `${t('ar', 'admin.email.body')}\n${url}`,
-    }),
+  // Same driver as every other mail (Microsoft Graph or Resend); throws in production when none is set.
+  await sendEmail({
+    to: [identifier],
+    subject: t('ar', 'admin.email.subject'),
+    html: `<div dir="rtl" style="font-family:sans-serif"><p>${t('ar', 'admin.email.body')}</p><p><a href="${escapeHtml(url)}">${t('ar', 'admin.email.cta')}</a></p></div>`,
+    text: `${t('ar', 'admin.email.body')}\n${url}`,
   });
-  if (!res.ok) throw new Error(`Resend error: ${res.status}`);
 }
 
 export const { handlers, signIn, signOut } = NextAuth({
@@ -80,7 +74,10 @@ export const { handlers, signIn, signOut } = NextAuth({
   }),
   session: { strategy: 'database' },
   trustHost: true,
-  providers: [Resend({ apiKey: process.env.RESEND_API_KEY ?? 'unset', from: process.env.EMAIL_FROM, sendVerificationRequest })],
+  // Auth.js's Resend provider is only the email-provider shell (id 'resend' keeps the existing
+  // /api/auth/{signin,callback}/resend URLs): sendVerificationRequest replaces its Resend call, so the
+  // apiKey below is never used and sign-in works with any driver, Microsoft Graph included.
+  providers: [Resend({ apiKey: 'unused', from: process.env.EMAIL_FROM, sendVerificationRequest })],
   pages: { signIn: '/admin/sign-in', verifyRequest: '/admin/sign-in?sent=1', error: '/admin/sign-in?error=1' },
   callbacks: {
     // Runs before any user/account row is created: non-admins never get one.
