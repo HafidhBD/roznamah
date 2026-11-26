@@ -4,8 +4,7 @@ import { StudioPanel } from '@/components/studio/StudioPanel';
 import { db } from '@/db/client';
 import { taxonomyTerms } from '@/db/schema';
 import { getLang, t } from '@/i18n';
-import { defaultDesign } from '@/lib/design';
-import { getDraft, listEventViews } from '@/lib/draft';
+import { getDraft, listEventViews, newDraftDesign } from '@/lib/draft';
 import { logoUrlFor, storedPalette } from '@/lib/logo';
 import { ownLogoPath } from '@/lib/snapshot';
 import { turnstileSiteKey } from '@/lib/turnstile';
@@ -26,7 +25,8 @@ export default async function Page({ searchParams }: { searchParams: Promise<Rec
       .where(and(eq(taxonomyTerms.group, 'sector'), eq(taxonomyTerms.active, true)))
       .orderBy(asc(taxonomyTerms.sort)),
   ]);
-  const design = { ...defaultDesign, ...draft?.design };
+  // No draft yet: preview what the first save will create (calendar in the visitor's UI language).
+  const design = { ...newDraftDesign(lang), ...draft?.design };
   const startMonth = draft?.startMonth ?? `${new Date().getUTCFullYear() + 1}-01-01`;
   const events = draft ? await listEventViews(draft, lang) : [];
   const logoPath = draft ? ownLogoPath(draft.id, design.logoPath) : null;

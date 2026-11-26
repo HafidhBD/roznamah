@@ -40,6 +40,22 @@ describe('draft API', () => {
     expect(json.events).toEqual([]);
   });
 
+  it("a new draft's design language follows the visitor's UI language (rz_lang); existing drafts keep theirs", async () => {
+    const create = async (lang?: string) => {
+      const res = await GET(req('GET', '/api/draft', undefined, undefined, lang ? `rz_lang=${lang}` : ''));
+      tokens.push(res.cookies.get('rz_draft')!.value);
+      return { token: res.cookies.get('rz_draft')!.value, json: await res.json() };
+    };
+    const en = await create('en');
+    expect(en.json.calendar.design.language).toBe('en');
+    expect((await create('ar')).json.calendar.design.language).toBe('ar');
+    expect((await create()).json.calendar.design.language).toBe('ar');
+    expect((await create('fr')).json.calendar.design.language).toBe('ar');
+    // Switching the UI to Arabic later does not touch the existing English draft.
+    const again = await (await GET(req('GET', '/api/draft', en.token, undefined, 'rz_lang=ar'))).json();
+    expect(again.calendar.design.language).toBe('en');
+  });
+
   it('does not re-set the cookie for a valid token', async () => {
     const { token } = await fresh();
     const res = await GET(req('GET', '/api/draft', token));
@@ -104,6 +120,8 @@ describe('draft API', () => {
     expect(j.calendar.startMonth).toBe('2027-03-01');
     expect(j.calendar.design.primary).toBe('#112233');
     expect(j.calendar.design.secondary).toBe('#d8a54f');
+    expect((await PATCH(req('PATCH', '/api/draft', token, { startMonth: '1999-12-01' }))).status).toBe(400);
+    expect((await PATCH(req('PATCH', '/api/draft', token, { startMonth: '2101-01' }))).status).toBe(400);
     expect((await PATCH(req('PATCH', '/api/draft', token, { design: { title: 'x'.repeat(121) } }))).status).toBe(400);
     expect((await PATCH(req('PATCH', '/api/draft', token, { design: { bogus: 1 } }))).status).toBe(400);
     expect((await PATCH(req('PATCH', '/api/draft', token, { selections: { sector: 1 } }))).status).toBe(400);

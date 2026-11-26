@@ -36,13 +36,16 @@ function defaultStartMonth(now = new Date()): string {
   return `${now.getUTCFullYear() + 1}-01-01`;
 }
 
+/** Design of a brand-new draft: the defaults, in the visitor's UI language ('en' only when chosen). */
+export const newDraftDesign = (lang?: string) => ({ ...defaultDesign, language: lang === 'en' ? ('en' as const) : ('ar' as const) });
+
 /**
  * Core draft lookup. A token that matches no row is never adopted: with `create`
  * a brand-new row and fresh token are produced, otherwise null.
  */
 export async function resolveDraft(
   token: string | undefined,
-  opts: { create: boolean },
+  opts: { create: boolean; lang?: 'ar' | 'en' },
 ): Promise<ResolvedDraft | null> {
   if (token && token.length <= 200) {
     const [row] = await db.select().from(calendars).where(eq(calendars.draftToken, token));
@@ -56,7 +59,8 @@ export async function resolveDraft(
       draftToken: fresh,
       startMonth: defaultStartMonth(),
       selections: defaultSelections(),
-      design: defaultDesign,
+      // A new draft's calendar language follows the visitor's UI language (existing drafts are untouched).
+      design: newDraftDesign(opts.lang),
     })
     .returning();
   return { calendar: row, token: fresh, created: true };
@@ -65,7 +69,8 @@ export async function resolveDraft(
 /** For route handlers / server actions (request scope required). */
 export async function getOrCreateDraft(): Promise<CalendarRow> {
   const jar = await cookies();
-  const r = (await resolveDraft(jar.get(DRAFT_COOKIE)?.value, { create: true }))!;
+  const lang = jar.get(LANG_COOKIE)?.value === 'en' ? 'en' : 'ar';
+  const r = (await resolveDraft(jar.get(DRAFT_COOKIE)?.value, { create: true, lang }))!;
   if (r.created) jar.set(DRAFT_COOKIE, r.token, draftCookieOptions());
   return r.calendar;
 }
@@ -86,9 +91,18 @@ export const selectionsSchema = z.object({
   uses: keys,
 });
 
+/** Start months are bounded to sane years (the Hijri/occurrence math and UI assume nothing wilder). */
+export const MIN_START_YEAR = 2000;
+export const MAX_START_YEAR = 2100;
+export const startYearInRange = (s: string) => {
+  const y = Number(s.slice(0, 4));
+  return y >= MIN_START_YEAR && y <= MAX_START_YEAR;
+};
+
 export const startMonthSchema = z
   .string()
   .regex(/^\d{4}-(0[1-9]|1[0-2])(-\d{2})?$/)
+  .refine(startYearInRange, `year must be ${MIN_START_YEAR}-${MAX_START_YEAR}`)
   .transform((s) => `${s.slice(0, 7)}-01`);
 
 export { designSchema };
@@ -187,11 +201,11 @@ function cookieFrom(req: Request, name: string): string | undefined {
   return undefined;
 }
 
-export const draftFromRequest = (req: Request, create: boolean) =>
-  resolveDraft(cookieFrom(req, DRAFT_COOKIE), { create });
-
 export const langFromRequest = (req: Request): 'ar' | 'en' =>
   cookieFrom(req, LANG_COOKIE) === 'en' ? 'en' : 'ar';
+
+export const draftFromRequest = (req: Request, create: boolean) =>
+  resolveDraft(cookieFrom(req, DRAFT_COOKIE), { create, lang: langFromRequest(req) });
 
 /** Sets the draft cookie on a response only when a new draft was just created. */
 export function withDraftCookie(res: NextResponse, draft: ResolvedDraft): NextResponse {
