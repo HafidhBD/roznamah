@@ -47,4 +47,5 @@ export const en: Messages = {
   'plan.hijri': 'Hijri',
   'plan.bar.suffix': 'occasions in your calendar',
   'plan.bar.open': 'View calendar',
+  'plan.showMore': 'Show more',
 };

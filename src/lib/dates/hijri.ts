@@ -37,7 +37,7 @@ export function hijriToGregorian(hYear: number, hMonth: number, hDay: number): D
 }
 
 export function formatHijri(d: Date, lang: Lang): string {
-  const locale = lang === 'ar' ? 'ar-SA-u-ca-islamic-umalqura' : 'en-u-ca-islamic-umalqura';
+  const locale = lang === 'ar' ? 'ar-SA-u-ca-islamic-umalqura-nu-latn' : 'en-u-ca-islamic-umalqura-nu-latn';
   return new Intl.DateTimeFormat(locale, {
     timeZone: 'UTC',
     year: 'numeric',

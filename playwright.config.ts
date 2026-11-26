@@ -1,6 +1,10 @@
 import { defineConfig } from '@playwright/test';
 import { existsSync } from 'node:fs';
 
+try {
+  process.loadEnvFile('.env.local');
+} catch {}
+
 const chromium = '/opt/pw-browsers/chromium';
 
 export default defineConfig({

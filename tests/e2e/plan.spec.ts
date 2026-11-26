@@ -1,4 +1,18 @@
-import { expect, test } from '@playwright/test';
+import { expect, test, type BrowserContext } from '@playwright/test';
+import postgres from 'postgres';
+
+const tokens: string[] = [];
+async function remember(ctx: BrowserContext) {
+  for (const c of await ctx.cookies()) if (c.name === 'rz_draft') tokens.push(c.value);
+}
+
+test.afterAll(async () => {
+  if (!tokens.length || !process.env.DATABASE_URL) return;
+  const sql = postgres(process.env.DATABASE_URL);
+  await sql`delete from calendars where draft_token = any(${tokens})`;
+  await sql.end();
+});
+
 
 test('plan builder: recommend, add, persist, isolate', async ({ page, browser }) => {
   await page.goto('/');
@@ -12,6 +26,13 @@ test('plan builder: recommend, add, persist, isolate', async ({ page, browser })
   const cards = page.getByTestId('rec-card');
   await expect(cards.first()).toBeVisible();
   await expect(cards.first().getByTestId('rec-reasons')).toContainText('الصحة');
+  await expect(cards).toHaveCount(12);
+  await page.getByTestId('show-more').click();
+  await expect(cards).toHaveCount(24);
+  const national = page.getByTestId('rec-card').filter({ hasText: 'اليوم الوطني' });
+  while (!(await national.count()) && (await page.getByTestId('show-more').count())) {
+    await page.getByTestId('show-more').click();
+  }
   await expect(page.getByTestId('rec-card').filter({ hasText: 'اليوم الوطني' }).first()).toBeVisible();
 
   await cards.nth(0).getByTestId('rec-toggle').click();
@@ -19,6 +40,7 @@ test('plan builder: recommend, add, persist, isolate', async ({ page, browser })
   await expect(page.getByTestId('plan-count')).toHaveText('2');
   await saved;
 
+  await remember(page.context());
   await page.reload();
   await expect(page.getByTestId('sector-government')).toHaveAttribute('aria-pressed', 'true');
   await expect(page.getByTestId('chip-health')).toHaveAttribute('aria-pressed', 'true');
@@ -29,5 +51,6 @@ test('plan builder: recommend, add, persist, isolate', async ({ page, browser })
   const page2 = await other.newPage();
   await page2.goto('http://localhost:3000/');
   await expect(page2.getByTestId('plan-count')).toHaveText('0');
+  await remember(other);
   await other.close();
 });

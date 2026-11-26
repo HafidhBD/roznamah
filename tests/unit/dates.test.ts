@@ -61,7 +61,7 @@ describe('hijri conversion', () => {
   it('formats in both languages', () => {
     const d = new Date('2027-03-10T12:00:00Z');
     expect(formatHijri(d, 'en')).toContain('1448');
-    expect(formatHijri(d, 'ar')).toMatch(/1448|١٤٤٨/);
+    expect(formatHijri(d, 'ar')).toContain('1448');
   });
 });
 

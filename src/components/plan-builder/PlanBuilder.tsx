@@ -21,6 +21,7 @@ type Props = {
 };
 
 const SAVE_DELAY_MS = 500;
+const PAGE_SIZE = 12;
 const toggleIn = (list: string[], key: string) =>
   list.includes(key) ? list.filter((k) => k !== key) : [...list, key];
 
@@ -30,6 +31,7 @@ export function PlanBuilder({ lang, taxonomy, months, initial }: Props) {
   const [recs, setRecs] = useState<Recommendation[] | null>(null);
   const [loading, setLoading] = useState(false);
   const [failed, setFailed] = useState(false);
+  const [visible, setVisible] = useState(PAGE_SIZE);
   const draft = useDraftEvents(initial.events);
 
   const latest = useRef({ sel, startMonth });
@@ -85,6 +87,7 @@ export function PlanBuilder({ lang, taxonomy, months, initial }: Props) {
       });
       if (!res.ok) throw new Error(String(res.status));
       setRecs((await res.json()).items);
+      setVisible(PAGE_SIZE);
     } catch {
       setFailed(true);
     } finally {
@@ -218,7 +221,7 @@ export function PlanBuilder({ lang, taxonomy, months, initial }: Props) {
             <p className="text-muted">{t(lang, 'plan.results.empty')}</p>
           ) : (
             <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-              {recs.map((r) => (
+              {recs.slice(0, visible).map((r) => (
                 <RecommendationCard
                   key={r.eventId}
                   rec={r}
@@ -228,6 +231,18 @@ export function PlanBuilder({ lang, taxonomy, months, initial }: Props) {
                   onToggle={() => (draft.has(r.eventId) ? draft.remove(r.eventId) : draft.add([r.eventId]))}
                 />
               ))}
+            </div>
+          )}
+          {recs.length > visible && (
+            <div className="mt-6 flex justify-center">
+              <button
+                type="button"
+                data-testid="show-more"
+                onClick={() => setVisible((v) => v + PAGE_SIZE)}
+                className="min-h-11 rounded-xl border border-line bg-surface px-8 text-sm font-semibold hover:border-brand hover:text-brand"
+              >
+                {t(lang, 'plan.showMore')}
+              </button>
             </div>
           )}
         </section>
