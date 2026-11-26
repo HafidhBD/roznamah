@@ -18,15 +18,8 @@ async function main() {
   const { launchBrowser } = await import('@/lib/render/pdf');
   const { processDownload } = await import('@/lib/render/job');
   const { sql } = await import('@/db/client');
-
-  // Liveness marker for the compose healthcheck (mtime < 2 min).
-  const alive = () => {
-    try {
-      writeFileSync('/tmp/worker-alive', String(Date.now()));
-    } catch {}
-  };
-  alive();
-  const heartbeat = setInterval(alive, 30_000);
+  const { logConfigProblems } = await import('@/lib/config-check');
+  logConfigProblems('worker');
 
   let browser = await launchBrowser();
   const liveBrowser = async () => {
@@ -50,11 +43,25 @@ async function main() {
   );
   console.info(`[worker] listening for ${RENDER_JOB}`);
 
+  // Liveness marker for the compose healthcheck (mtime < 2 min). Touched only after pg-boss itself
+  // answers a query on the render queue, so a dead boss / lost DB turns the container unhealthy.
   let stopping = false;
+  let heartbeat: ReturnType<typeof setTimeout> | undefined;
+  const beat = async () => {
+    try {
+      if (await boss.getQueue(RENDER_JOB)) writeFileSync('/tmp/worker-alive', String(Date.now()));
+      else console.error(`[worker] heartbeat: queue ${RENDER_JOB} not found`);
+    } catch (err) {
+      console.error('[worker] heartbeat: pg-boss check failed', err);
+    }
+    if (!stopping) heartbeat = setTimeout(() => void beat(), 30_000);
+  };
+  await beat();
+
   const shutdown = async (signal: string) => {
     if (stopping) return;
     stopping = true;
-    clearInterval(heartbeat);
+    clearTimeout(heartbeat);
     console.info(`[worker] ${signal}: stopping`);
     await boss.stop({ graceful: true, timeout: 30_000 }).catch((e) => console.error(e));
     await browser.close().catch(() => {});
