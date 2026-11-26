@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { downloadEmail, notifyNewLead, outbox, outboxExposed, sendDownloadEmail } from '@/lib/email';
+import { downloadEmail, memoryTransport, notifyNewLead, outbox, outboxExposed, sendDownloadEmail } from '@/lib/email';
 
 beforeEach(() => {
   vi.stubEnv('EMAIL_TRANSPORT', 'memory');
@@ -26,6 +26,18 @@ describe('download email', () => {
     expect(m.html).toContain('7 أيام');
     expect(m.text).toContain(link);
     expect(m.text).toContain('7 أيام');
+  });
+
+  it('EMAIL_TRANSPORT=memory is ignored in production (real transport is used)', async () => {
+    vi.stubEnv('NODE_ENV', 'production');
+    vi.stubEnv('RESEND_API_KEY', '');
+    expect(memoryTransport()).toBe(false);
+    await expect(sendDownloadEmail('a@b.sa', 'ar', 'https://x/download/t', 'Org')).rejects.toThrow('RESEND_API_KEY');
+    expect(outbox).toHaveLength(0);
+  });
+
+  it('control characters never reach the subject', () => {
+    expect(downloadEmail('ar', 'https://x/download/t', 'Org\r\nBcc: x@evil.test').subject).toBe('تقويم OrgBcc: x@evil.test جاهز للتحميل');
   });
 
   it('English is LTR', () => {

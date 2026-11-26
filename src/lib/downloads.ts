@@ -4,12 +4,12 @@
  */
 import { randomBytes } from 'node:crypto';
 import path from 'node:path';
-import { and, count, eq, gt, ne, sql } from 'drizzle-orm';
+import { and, count, desc, eq, gt, ne, sql } from 'drizzle-orm';
 import { z } from 'zod';
 import { db } from '@/db/client';
-import { downloads, leads, type DownloadFile, type DownloadRow, type FormatRequest } from '@/db/schema';
+import { calendars, downloads, leads, type DownloadFile, type DownloadRow, type FormatRequest } from '@/db/schema';
 import type { Lang } from '@/i18n/core';
-import { notifyNewLead, sendDownloadEmail } from '@/lib/email';
+import { notifyNewLead, sendDownloadEmail, stripControl } from '@/lib/email';
 import { pageFormatSchema } from '@/lib/print-sizes';
 import { enqueueRender } from '@/lib/queue';
 import { buildSnapshot } from '@/lib/snapshot';
@@ -21,6 +21,8 @@ export const REUSE_WINDOW_MS = 2 * 60 * 1000;
 export const RATE_WINDOW_MS = 60 * 60 * 1000;
 export const MAX_PER_EMAIL = 5;
 export const MAX_PER_IP = 20;
+/** A download still queued/rendering after this long is reported (and treated) as failed. */
+export const STALE_AFTER_MS = 15 * 60 * 1000;
 
 export class RateLimitError extends Error {
   constructor(public readonly scope: 'email' | 'ip') {
@@ -52,14 +54,15 @@ export const formatsSchema = z
     return list.filter((f) => !seen.has(fileName(f)) && Boolean(seen.add(fileName(f))));
   });
 
+/** A string with control characters (CR/LF, NUL, C1, …) removed, then trimmed. */
+const cleanString = () => z.string().transform(stripControl).pipe(z.string().trim());
+
 export const downloadRequestSchema = z.object({
-  email: z.string().trim().max(254).pipe(z.email()),
-  orgName: z.string().trim().min(1).max(200),
+  email: cleanString().pipe(z.string().max(254)).pipe(z.email()),
+  orgName: cleanString().pipe(z.string().min(1).max(200)),
   sector: z.string().trim().min(1).max(64).nullable().optional(),
-  phone: z
-    .string()
-    .trim()
-    .max(32)
+  phone: cleanString()
+    .pipe(z.string().max(32))
     .optional()
     .transform((s) => (s ? normalizePhone(s) : undefined))
     .refine((s) => s === undefined || SAUDI_PHONE.test(s), 'invalid'),
@@ -80,12 +83,34 @@ export const downloadLink = (token: string) => `${appUrl()}/download/${token}`;
 const newToken = () => randomBytes(32).toString('base64url');
 const TOKEN = /^[A-Za-z0-9_-]{16,100}$/;
 
-/** Client IP behind Traefik: first X-Forwarded-For entry, else X-Real-IP, else 'unknown'. */
+const IP_LIKE = /^[0-9A-Fa-f:.]{2,45}$/;
+const ipOrNull = (v: string | null | undefined) => {
+  const ip = v?.trim();
+  return ip && IP_LIKE.test(ip) ? ip : null;
+};
+
+/**
+ * Client IP. Behind Traefik (which appends the peer address to X-Forwarded-For) the entries on
+ * the left are client-controlled, so count from the right: with TRUSTED_PROXY_HOPS = n (default 1)
+ * the n-th entry from the right. Fallback X-Real-IP, then 'unknown'. With
+ * TRUST_CF_CONNECTING_IP=true (only when Cloudflare is in front), CF-Connecting-IP wins.
+ */
 export function clientIp(req: Request): string {
-  const first = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim();
-  const ip = first || req.headers.get('x-real-ip')?.trim();
-  return ip ? ip.slice(0, 64) : 'unknown';
+  if (process.env.TRUST_CF_CONNECTING_IP === 'true') {
+    const cf = ipOrNull(req.headers.get('cf-connecting-ip'));
+    if (cf) return cf;
+  }
+  const hops = Math.max(1, Number.parseInt(process.env.TRUSTED_PROXY_HOPS ?? '1', 10) || 1);
+  const xff = (req.headers.get('x-forwarded-for') ?? '')
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean);
+  if (xff.length >= hops) return ipOrNull(xff[xff.length - hops]) ?? 'unknown';
+  return ipOrNull(req.headers.get('x-real-ip')) ?? 'unknown';
 }
+
+/** Same set of output files, whatever the order. */
+const formatKey = (formats: FormatRequest[]) => [...new Set(formats.map(fileName))].sort().join('|');
 
 // ---- create ----
 
@@ -103,15 +128,26 @@ export type CreateDownloadInput = {
 };
 
 export async function createDownload(input: CreateDownloadInput): Promise<{ token: string; reused: boolean }> {
-  const email = input.email.trim().toLowerCase();
-  const now = Date.now();
+  const email = stripControl(input.email).trim().toLowerCase();
+  const orgName = stripControl(input.orgName).trim();
+  const wanted = formatKey(input.formats);
 
+  // Frozen at request time, and built outside the transaction: it queries through the pool, and
+  // doing that while holding a pooled connection deadlocks the pool under concurrent requests.
+  const snapshot = await buildSnapshot(input.calendarId);
+
+  // Everything inside uses `tx` only (never the global `db`).
   const created = await db.transaction(async (tx) => {
     // Serialize requests per email so a double-click cannot slip past the reuse check or the limit.
     await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`rz-download:${email}`}))`);
+    const now = Date.now();
 
-    const [existing] = await tx
-      .select({ token: downloads.token })
+    const [calendar] = await tx
+      .select({ updatedAt: calendars.updatedAt })
+      .from(calendars)
+      .where(eq(calendars.id, input.calendarId));
+    const recent = await tx
+      .select({ token: downloads.token, formats: downloads.formats, createdAt: downloads.createdAt })
       .from(downloads)
       .innerJoin(leads, eq(downloads.leadId, leads.id))
       .where(
@@ -122,8 +158,12 @@ export async function createDownload(input: CreateDownloadInput): Promise<{ toke
           gt(downloads.createdAt, new Date(now - REUSE_WINDOW_MS)),
         ),
       )
-      .limit(1);
-    if (existing) return { kind: 'reused', token: existing.token } as const;
+      .orderBy(desc(downloads.createdAt));
+    // Reuse only an identical request: same files, and no edit to the calendar since.
+    const same = recent.find(
+      (d) => formatKey(d.formats) === wanted && (!calendar || calendar.updatedAt <= d.createdAt),
+    );
+    if (same) return { kind: 'reused', token: same.token } as const;
 
     const since = new Date(now - RATE_WINDOW_MS);
     const [{ n: byEmail }] = await tx
@@ -137,12 +177,11 @@ export async function createDownload(input: CreateDownloadInput): Promise<{ toke
       .where(and(eq(leads.ip, input.ip), gt(leads.createdAt, since)));
     if (byIp >= MAX_PER_IP) throw new RateLimitError('ip');
 
-    const snapshot = await buildSnapshot(input.calendarId);
     const [lead] = await tx
       .insert(leads)
       .values({
         email,
-        orgName: input.orgName,
+        orgName,
         sector: input.sector,
         fields: input.fields,
         phone: input.phone ?? null,
@@ -176,7 +215,7 @@ export async function createDownload(input: CreateDownloadInput): Promise<{ toke
     throw err;
   }
   try {
-    await sendDownloadEmail(email, input.lang ?? 'ar', downloadLink(download.token), input.orgName);
+    await sendDownloadEmail(email, input.lang ?? 'ar', downloadLink(download.token), orgName);
   } catch (err) {
     // A link nobody received is useless: fail it so a retry creates a fresh download and email.
     await fail(`email: ${String(err)}`);
@@ -194,10 +233,25 @@ export type DownloadStatus = {
   expired: boolean;
 };
 
+/** queued/rendering for longer than STALE_AFTER_MS means the render was lost: report failed. */
+export function publicStatus(
+  row: { status: DownloadRow['status']; createdAt: Date },
+  now = Date.now(),
+): DownloadRow['status'] {
+  const pending = row.status === 'queued' || row.status === 'rendering';
+  return pending && now - row.createdAt.getTime() > STALE_AFTER_MS ? 'failed' : row.status;
+}
+
 async function byToken(token: string) {
   if (!TOKEN.test(token)) return null;
   const [row] = await db
-    .select({ id: downloads.id, status: downloads.status, files: downloads.files, expiresAt: downloads.expiresAt })
+    .select({
+      id: downloads.id,
+      status: downloads.status,
+      files: downloads.files,
+      expiresAt: downloads.expiresAt,
+      createdAt: downloads.createdAt,
+    })
     .from(downloads)
     .where(eq(downloads.token, token));
   return row ?? null;
@@ -207,16 +261,18 @@ async function byToken(token: string) {
 export async function getDownloadStatus(token: string): Promise<DownloadStatus | null> {
   const row = await byToken(token);
   if (!row) return null;
-  const expired = row.expiresAt.getTime() <= Date.now();
+  const now = Date.now();
+  const expired = row.expiresAt.getTime() <= now;
+  const status = publicStatus(row, now);
   const files =
-    expired || row.status !== 'ready'
+    expired || status !== 'ready'
       ? []
       : row.files.map((f) => ({
           name: f.name,
           size: f.size,
           url: `/api/files/${encodeURIComponent(token)}/${encodeURIComponent(f.name)}`,
         }));
-  return { status: row.status, files, expired };
+  return { status, files, expired };
 }
 
 export type FileLookup =

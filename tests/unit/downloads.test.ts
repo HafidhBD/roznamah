@@ -2,7 +2,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { eq, inArray } from 'drizzle-orm';
-import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { db, sql } from '@/db/client';
 import { calendars, downloads, leads } from '@/db/schema';
 
@@ -18,7 +18,8 @@ vi.mock('@/lib/queue', () => ({
     enqueued.push(downloadId);
   }),
 }));
-vi.mock('@/lib/email', () => ({
+vi.mock('@/lib/email', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/email')>()),
   sendDownloadEmail: vi.fn(async (to: string, _lang: string, link: string) => {
     sent.push({ to, link });
   }),
@@ -86,7 +87,10 @@ async function newDraft(design: Record<string, unknown> = { orgNameAr: 'شركة
   return { token, calendarId: row.id };
 }
 
-const input = (calendarId: string, email: string, ip = '10.0.0.1') => ({
+let ipSeq = 0;
+/** A fresh IP per call by default, so the 20/IP limit only bites in the tests about it. */
+const nextIp = () => `10.0.${Math.floor(++ipSeq / 250)}.${ipSeq % 250}`;
+const input = (calendarId: string, email: string, ip = nextIp()) => ({
   calendarId,
   email,
   orgName: 'شركة الاختبار',
@@ -177,6 +181,86 @@ describe('createDownload', () => {
   });
 });
 
+describe('createDownload (round 1 fixes)', () => {
+  it('15 concurrent requests with distinct emails all complete (no pool deadlock)', async () => {
+    const { calendarId } = await newDraft();
+    const all = Promise.all(
+      Array.from({ length: 15 }, (_, i) => lib.createDownload(input(calendarId, uniqueEmail(`pool${i}`), `10.3.0.${i}`))),
+    );
+    const timeout = new Promise<'timeout'>((done) => setTimeout(() => done('timeout'), 15_000));
+    const result = await Promise.race([all, timeout]);
+    expect(result).not.toBe('timeout');
+    expect(new Set((result as { token: string }[]).map((r) => r.token)).size).toBe(15);
+  }, 20_000);
+
+  it('reuses only for the same formats (order-insensitive)', async () => {
+    const { calendarId } = await newDraft();
+    const email = uniqueEmail('fmt');
+    const A3B = { kind: 'wall', size: 'A3', bleed: true } as const;
+    const a = await lib.createDownload({ ...input(calendarId, email), formats: [A4, A3B] });
+    const same = await lib.createDownload({ ...input(calendarId, email), formats: [A3B, A4] });
+    expect(same).toEqual({ token: a.token, reused: true });
+    const other = await lib.createDownload({ ...input(calendarId, email), formats: [A4] });
+    expect(other.reused).toBe(false);
+    expect(other.token).not.toBe(a.token);
+    expect(sent).toHaveLength(2);
+  });
+
+  it('does not reuse after the calendar was edited (new download, new email)', async () => {
+    const { token: draftToken, calendarId } = await newDraft();
+    const email = uniqueEmail('edited');
+    const a = await lib.createDownload(input(calendarId, email));
+    await new Promise((r) => setTimeout(r, 5));
+    await draftRoute.PATCH(
+      new Request('http://x/api/draft', {
+        method: 'PATCH',
+        headers: { 'content-type': 'application/json', cookie: `rz_draft=${draftToken}` },
+        body: JSON.stringify({ design: { orgNameAr: 'اسم معدّل' } }),
+      }),
+    );
+    const b = await lib.createDownload(input(calendarId, email));
+    expect(b.reused).toBe(false);
+    expect(b.token).not.toBe(a.token);
+    expect(sent).toHaveLength(2);
+    const [row] = await db.select().from(downloads).where(eq(downloads.token, b.token));
+    expect(row.snapshot.design.orgNameAr).toBe('اسم معدّل');
+  });
+
+  it('adding or removing an occasion also counts as an edit', async () => {
+    const { token: draftToken, calendarId } = await newDraft();
+    const email = uniqueEmail('evedit');
+    const a = await lib.createDownload(input(calendarId, email));
+    await new Promise((r) => setTimeout(r, 5));
+    const eventsRoute = await import('@/app/api/draft/events/route');
+    const res = await eventsRoute.POST(
+      new Request('http://x/api/draft/events', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', cookie: `rz_draft=${draftToken}` },
+        body: JSON.stringify({ custom: { titleAr: 'ذكرى التأسيس', date: '2027-05-01' } }),
+      }),
+    );
+    expect(res.status).toBe(200);
+    const b = await lib.createDownload(input(calendarId, email));
+    expect(b.token).not.toBe(a.token);
+  });
+
+  it('strips control characters (CR/LF) from the org name before storing and emailing', async () => {
+    const { calendarId } = await newDraft();
+    const email = uniqueEmail('crlf');
+    await lib.createDownload({ ...input(calendarId, email), orgName: 'Acme\r\nBcc: x@evil.test\u0007' });
+    const [lead] = await db.select().from(leads).where(eq(leads.email, email));
+    expect(lead.orgName).toBe('AcmeBcc: x@evil.test');
+    const parsed = lib.downloadRequestSchema.parse({
+      email: ' a@b.sa\n',
+      orgName: '\u0000 Org\r\n ',
+      phone: ' 0512345678\t',
+      formats: [A4],
+    });
+    expect(parsed).toMatchObject({ email: 'a@b.sa', orgName: 'Org', phone: '0512345678' });
+    expect(lib.downloadRequestSchema.safeParse({ email: 'a@b.sa', orgName: '\r\n', formats: [A4] }).success).toBe(false);
+  });
+});
+
 describe('status and files routes', () => {
   async function readyDownload(expiresAt: Date) {
     const { calendarId } = await newDraft();
@@ -217,6 +301,22 @@ describe('status and files routes', () => {
     expect(file.status).toBe(410);
   });
 
+  it('a download stuck in queued/rendering for more than 15 minutes is reported as failed', async () => {
+    const { calendarId } = await newDraft();
+    const { token } = await lib.createDownload(input(calendarId, uniqueEmail('stale')));
+    const get = async () => (await (await statusRoute.GET(new Request('http://x'), ctx({ token }))).json()).status;
+    expect(await get()).toBe('queued');
+    await db.update(downloads).set({ createdAt: new Date(Date.now() - 14 * 60_000) }).where(eq(downloads.token, token));
+    expect(await get()).toBe('queued');
+    await db
+      .update(downloads)
+      .set({ status: 'rendering', createdAt: new Date(Date.now() - 16 * 60_000) })
+      .where(eq(downloads.token, token));
+    expect(await get()).toBe('failed');
+    expect(lib.publicStatus({ status: 'ready', createdAt: new Date(0) }, Date.now())).toBe('ready');
+    expect(lib.publicStatus({ status: 'queued', createdAt: new Date(0) }, Date.now())).toBe('failed');
+  });
+
   it('a name outside the files list (path traversal) is 404; an unknown token is 404', async () => {
     const token = await readyDownload(new Date(Date.now() + 86_400_000));
     for (const name of ['../../etc/passwd', '..%2F..%2Fetc%2Fpasswd', 'roznamah-wall-A3.pdf']) {
@@ -227,12 +327,40 @@ describe('status and files routes', () => {
   });
 });
 
+describe('clientIp', () => {
+  const req = (h: Record<string, string>) => new Request('http://x', { headers: h });
+  afterEach(() => vi.unstubAllEnvs());
+
+  it('takes the rightmost X-Forwarded-For entry by default (a client-sent leftmost entry is ignored)', () => {
+    expect(lib.clientIp(req({ 'x-forwarded-for': '1.2.3.4, 203.0.113.9' }))).toBe('203.0.113.9');
+    expect(lib.clientIp(req({ 'x-forwarded-for': ' 203.0.113.9 ' }))).toBe('203.0.113.9');
+  });
+  it('skips TRUSTED_PROXY_HOPS - 1 more proxies from the right', () => {
+    vi.stubEnv('TRUSTED_PROXY_HOPS', '2');
+    expect(lib.clientIp(req({ 'x-forwarded-for': '1.2.3.4, 203.0.113.9, 10.0.0.2' }))).toBe('203.0.113.9');
+    // fewer entries than hops: fall back to X-Real-IP, then 'unknown'
+    expect(lib.clientIp(req({ 'x-forwarded-for': '10.0.0.2', 'x-real-ip': '198.51.100.4' }))).toBe('198.51.100.4');
+    expect(lib.clientIp(req({ 'x-forwarded-for': '10.0.0.2' }))).toBe('unknown');
+  });
+  it('falls back to X-Real-IP, then unknown; ignores garbage', () => {
+    expect(lib.clientIp(req({ 'x-real-ip': '2001:db8::1' }))).toBe('2001:db8::1');
+    expect(lib.clientIp(req({}))).toBe('unknown');
+    expect(lib.clientIp(req({ 'x-forwarded-for': '1.2.3.4, <script>' }))).toBe('unknown');
+  });
+  it('uses CF-Connecting-IP only when TRUST_CF_CONNECTING_IP=true', () => {
+    const h = { 'cf-connecting-ip': '192.0.2.50', 'x-forwarded-for': '1.2.3.4, 172.70.0.1' };
+    expect(lib.clientIp(req(h))).toBe('172.70.0.1');
+    vi.stubEnv('TRUST_CF_CONNECTING_IP', 'true');
+    expect(lib.clientIp(req(h))).toBe('192.0.2.50');
+  });
+});
+
 describe('POST /api/downloads', () => {
   const post = (draftToken: string, body: Record<string, unknown>, ip = '10.9.9.9') =>
     createRoute.POST(
       new Request('http://x/api/downloads', {
         method: 'POST',
-        headers: { 'content-type': 'application/json', cookie: `rz_draft=${draftToken}`, 'x-forwarded-for': `${ip}, 172.16.0.1` },
+        headers: { 'content-type': 'application/json', cookie: `rz_draft=${draftToken}`, 'x-forwarded-for': `6.6.6.6, ${ip}` },
         body: JSON.stringify(body),
       }),
     );
@@ -255,7 +383,7 @@ describe('POST /api/downloads', () => {
     expect((await bad.json()).fields).toEqual({ phone: 'invalid' });
   });
 
-  it('records the lead with the first forwarded IP and the draft fields; 400 for bad email / no formats', async () => {
+  it('records the lead with the proxy-appended (rightmost) forwarded IP and the draft fields; 400 for bad email / no formats', async () => {
     const { token } = await newDraft();
     const email = uniqueEmail('lead');
     expect((await post(token, body(email), '203.0.113.7')).status).toBe(200);
@@ -311,5 +439,13 @@ describe('render-download job', () => {
     renderMode.fail = false;
     await job.processDownload(row.id, browser, { retryCount: 0, retryLimit: 2 });
     expect((await statusOf(row.id)).status).toBe('failed');
+  });
+
+  it('a stale download (older than 15 minutes) is marked failed instead of rendered', async () => {
+    renderMode.fail = false;
+    const row = await queued();
+    await db.update(downloads).set({ createdAt: new Date(Date.now() - 20 * 60_000) }).where(eq(downloads.id, row.id));
+    await job.processDownload(row.id, browser, { retryCount: 0, retryLimit: 2 });
+    expect(await statusOf(row.id)).toMatchObject({ status: 'failed', error: 'stale' });
   });
 });

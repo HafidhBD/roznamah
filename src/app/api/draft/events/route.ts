@@ -2,7 +2,7 @@ import { and, eq, inArray } from 'drizzle-orm';
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { db } from '@/db/client';
-import { calendarEvents, events } from '@/db/schema';
+import { calendarEvents, calendars, events } from '@/db/schema';
 import { HEX_COLOR } from '@/lib/design';
 import { draftFromRequest, inSpan, langFromRequest, listEventViews, withDraftCookie } from '@/lib/draft';
 
@@ -10,6 +10,10 @@ const isoDate = z
   .string()
   .regex(/^\d{4}-\d{2}-\d{2}$/)
   .refine((s) => !Number.isNaN(Date.parse(`${s}T00:00:00Z`)) && new Date(`${s}T00:00:00Z`).toISOString().startsWith(s));
+
+/** Occasion changes are calendar edits (a download request after one must not reuse an older file). */
+const touch = (calendarId: string) =>
+  db.update(calendars).set({ updatedAt: new Date() }).where(eq(calendars.id, calendarId));
 
 const bodySchema = z.union([
   z.object({ eventIds: z.array(z.uuid()).min(1).max(100) }).strict(),
@@ -67,6 +71,7 @@ export async function POST(req: Request) {
       customColor: c.color ?? null,
     });
   }
+  await touch(draft.calendar.id);
   const views = await listEventViews(draft.calendar, langFromRequest(req));
   return withDraftCookie(NextResponse.json({ events: views }), draft);
 }
@@ -83,5 +88,6 @@ export async function DELETE(req: Request) {
     .where(and(eq(calendarEvents.id, id), eq(calendarEvents.calendarId, draft.calendar.id)))
     .returning({ id: calendarEvents.id });
   if (!deleted.length) return NextResponse.json({ error: 'not_found' }, { status: 404 });
+  await touch(draft.calendar.id);
   return NextResponse.json({ ok: true });
 }

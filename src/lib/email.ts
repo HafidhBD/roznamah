@@ -14,7 +14,12 @@ const globalForEmail = globalThis as unknown as { __roznamahOutbox?: SentEmail[]
 /** In-memory outbox (one per server process; shared across route bundles via globalThis). */
 export const outbox: SentEmail[] = (globalForEmail.__roznamahOutbox ??= []);
 
-export const memoryTransport = () => process.env.EMAIL_TRANSPORT === 'memory';
+/** In-memory transport; never in production, whatever EMAIL_TRANSPORT says. */
+export const memoryTransport = () =>
+  process.env.EMAIL_TRANSPORT === 'memory' && process.env.NODE_ENV !== 'production';
+
+/** Removes control characters (C0 incl. CR/LF and tab, DEL, C1). */
+export const stripControl = (s: string) => s.replace(/[\u0000-\u001F\u007F-\u009F]/g, '');
 /** GET /api/test/outbox exists only for tests / memory transport, never in production. */
 export const outboxExposed = () =>
   process.env.NODE_ENV !== 'production' && (process.env.NODE_ENV === 'test' || memoryTransport());
@@ -23,7 +28,10 @@ const appUrl = () => (process.env.APP_URL || 'http://localhost:3000').replace(/\
 const from = () => process.env.EMAIL_FROM || 'Roznamah <no-reply@example.com>';
 
 export async function sendEmail(msg: Omit<OutgoingEmail, 'from'>): Promise<void> {
-  const email: OutgoingEmail = { from: from(), ...msg };
+  const email: OutgoingEmail = { from: from(), ...msg, subject: stripControl(msg.subject) };
+  if (process.env.EMAIL_TRANSPORT === 'memory' && !memoryTransport()) {
+    console.warn('[email] EMAIL_TRANSPORT=memory is ignored in production');
+  }
   if (memoryTransport()) {
     outbox.push({ ...email, at: new Date().toISOString() });
     return;
@@ -45,7 +53,8 @@ const fill = (template: string, vars: Record<string, string>) =>
   template.replace(/\{(\w+)\}/g, (m, k: string) => vars[k] ?? m);
 
 /** Branded, table-based (email-client safe) HTML: logo, heading, big button, validity note. */
-export function downloadEmail(lang: Lang, link: string, orgName: string) {
+export function downloadEmail(lang: Lang, link: string, rawOrgName: string) {
+  const orgName = stripControl(rawOrgName).trim();
   const dir = lang === 'ar' ? 'rtl' : 'ltr';
   const align = lang === 'ar' ? 'right' : 'left';
   const subject = fill(t(lang, 'email.download.subject'), { orgName });

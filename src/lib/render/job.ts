@@ -8,7 +8,7 @@ import { and, eq, ne } from 'drizzle-orm';
 import type { Browser } from 'playwright';
 import { db } from '@/db/client';
 import { downloads, type DownloadFile } from '@/db/schema';
-import { downloadDir, fileName } from '@/lib/downloads';
+import { downloadDir, fileName, STALE_AFTER_MS } from '@/lib/downloads';
 import { renderPdf } from '@/lib/render/pdf';
 
 export type Attempt = { retryCount: number; retryLimit: number };
@@ -16,11 +16,12 @@ export type Attempt = { retryCount: number; retryLimit: number };
 /**
  * Throws on failure so pg-boss retries. Only the last attempt marks the download `failed`;
  * earlier ones put it back to `queued` so the download page keeps showing "preparing".
- * A download already `ready` or `failed` (e.g. its email bounced) is skipped.
+ * A download already `ready` or `failed` (e.g. its email bounced) is skipped; one older than
+ * STALE_AFTER_MS is marked failed (the status route already reports it so).
  */
 export async function processDownload(downloadId: string, browser: Browser, attempt: Attempt): Promise<void> {
   const [row] = await db
-    .select({ id: downloads.id, status: downloads.status, formats: downloads.formats })
+    .select({ id: downloads.id, status: downloads.status, formats: downloads.formats, createdAt: downloads.createdAt })
     .from(downloads)
     .where(eq(downloads.id, downloadId));
   if (!row) return console.warn(`[worker] download ${downloadId} not found; skipping`);
@@ -29,6 +30,11 @@ export async function processDownload(downloadId: string, browser: Browser, atte
   }
 
   const notFailed = and(eq(downloads.id, downloadId), ne(downloads.status, 'failed'));
+  if (Date.now() - row.createdAt.getTime() > STALE_AFTER_MS) {
+    // The status route already reports it failed; keep the row consistent instead of rendering late.
+    await db.update(downloads).set({ status: 'failed', error: 'stale' }).where(notFailed);
+    return console.warn(`[worker] download ${downloadId} is stale; marked failed`);
+  }
   await db.update(downloads).set({ status: 'rendering', error: null }).where(notFailed);
   const dir = downloadDir(downloadId);
   try {
