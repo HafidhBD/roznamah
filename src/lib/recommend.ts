@@ -49,7 +49,9 @@ export function scoreEvent(event: EventWithTags, sel: Selections): { score: numb
     const st = event.tags.find((t) => t.group === 'sector' && t.key === sel.sector);
     factor = st ? (SECTOR_FACTOR[st.weight] ?? UNTAGGED_SECTOR_FACTOR) : UNTAGGED_SECTOR_FACTOR;
   }
-  const score = Math.min(100, Math.max(0, Math.round(raw * factor)));
+  const clamped = Math.min(100, Math.max(0, Math.round(raw * factor)));
+  // National and religious occasions are never scored below their base, whatever the sector.
+  const score = special ? Math.max(35, clamped) : clamped;
 
   const reasons: Reason[] = [];
   if (event.kind === 'national') reasons.push({ ar: 'مناسبة وطنية', en: 'National occasion' });

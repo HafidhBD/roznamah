@@ -38,6 +38,13 @@ describe('scoreEvent', () => {
     expect(scoreEvent(nationalDay, sel({ fields: ['sports'], uses: ['x'] })).score).toBeGreaterThanOrEqual(35);
   });
 
+  it('national/religious floor holds for every sector', () => {
+    for (const sector of [null, 'government', 'private', 'semi_government', 'nonprofit']) {
+      expect(scoreEvent(nationalDay, sel({ sector })).score).toBeGreaterThanOrEqual(35);
+      expect(scoreEvent(ev('religious', [gov(1)]), sel({ sector })).score).toBeGreaterThanOrEqual(35);
+    }
+  });
+
   it('white friday scores lower for government than private', () => {
     const f = { fields: ['retail'] };
     expect(scoreEvent(whiteFriday, sel({ sector: 'government', ...f })).score).toBeLessThan(
@@ -58,7 +65,7 @@ describe('scoreEvent', () => {
   });
 
   it('applies the sector factor for untagged sector and clamps', () => {
-    expect(scoreEvent(nationalDay, sel({ sector: 'government' })).score).toBe(32); // 35 * 0.9
+    expect(scoreEvent(nationalDay, sel({ sector: 'government' })).score).toBe(35); // floored: 35 * 0.9 would be 32
     const full = ev('national', [
       tag('field', 'a', 'أ', 'A', 3), tag('audience', 'b', 'ب', 'B', 3), tag('use', 'c', 'ج', 'C', 3), gov(3),
     ]);
