@@ -6,17 +6,19 @@ try {
 } catch {}
 
 const chromium = '/opt/pw-browsers/chromium';
+const port = process.env.PORT ?? '3000';
+const baseURL = process.env.PLAYWRIGHT_BASE_URL ?? `http://localhost:${port}`;
 
 export default defineConfig({
   testDir: 'tests/e2e',
   reporter: 'list',
   use: {
-    baseURL: 'http://localhost:3000',
+    baseURL,
     launchOptions: existsSync(chromium) ? { executablePath: chromium } : {},
   },
   webServer: {
     command: 'npm run dev',
-    url: 'http://localhost:3000',
+    url: baseURL,
     reuseExistingServer: true,
     timeout: 120_000,
   },

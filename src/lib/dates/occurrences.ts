@@ -58,7 +58,13 @@ export function resolveOccurrences(
     } else if (event.hMonth != null && event.hDay != null) {
       const h0 = toHijri(parseIso(spanStart)).year;
       const h1 = toHijri(parseIso(last)).year;
-      for (let hy = h0; hy <= h1; hy++) computed.push(toIso(hijriToGregorian(hy, event.hMonth, event.hDay)));
+      for (let hy = h0; hy <= h1; hy++) {
+        try {
+          computed.push(toIso(hijriToGregorian(hy, event.hMonth, event.hDay)));
+        } catch {
+          // The day does not exist in that Hijri year (e.g. day 30 of a 29-day month): skip it.
+        }
+      }
     }
     const isHijri = event.recurrence === 'hijri_fixed';
     // Each override row replaces at most one computed occurrence: the nearest one in its year.
