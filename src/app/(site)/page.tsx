@@ -1,4 +1,4 @@
-import { asc, count, eq } from 'drizzle-orm';
+import { and, asc, count, eq } from 'drizzle-orm';
 import { db } from '@/db/client';
 import { events, taxonomyTerms } from '@/db/schema';
 import { PlanBuilder, type MonthOption, type Taxonomy } from '@/components/plan-builder/PlanBuilder';
@@ -38,7 +38,7 @@ export default async function Page() {
   const [terms, [{ total }], [{ national }], draft] = await Promise.all([
     db.select().from(taxonomyTerms).where(eq(taxonomyTerms.active, true)).orderBy(asc(taxonomyTerms.sort)),
     db.select({ total: count() }).from(events).where(eq(events.active, true)),
-    db.select({ national: count() }).from(events).where(eq(events.kind, 'national')),
+    db.select({ national: count() }).from(events).where(and(eq(events.active, true), eq(events.kind, 'national'))),
     getDraft(),
   ]);
 
