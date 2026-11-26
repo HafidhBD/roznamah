@@ -17,10 +17,18 @@ export function launchBrowser(): Promise<Browser> {
   return chromium.launch(existsSync(BUNDLED_CHROMIUM) ? { executablePath: BUNDLED_CHROMIUM } : {});
 }
 
+/**
+ * Origin the worker's Chromium loads the print route from. RENDER_BASE_URL (e.g. http://app:3000 on
+ * the compose network) keeps the render secret off the public URL; defaults to APP_URL.
+ */
+export function renderBaseUrl(): string {
+  return (process.env.RENDER_BASE_URL || process.env.APP_URL || 'http://localhost:3000').replace(/\/+$/, '');
+}
+
 export function printUrl(downloadId: string, format: PageFormat): string {
   const secret = process.env.RENDER_SECRET;
   if (!secret) throw new Error('RENDER_SECRET is not set');
-  const base = (process.env.APP_URL || 'http://localhost:3000').replace(/\/+$/, '');
+  const base = renderBaseUrl();
   const query = new URLSearchParams({ format: encodePageFormat(format), key: secret });
   return `${base}/print/${encodeURIComponent(downloadId)}?${query}`;
 }
