@@ -47,7 +47,7 @@ export function scoreEvent(event: EventWithTags, sel: Selections): { score: numb
   const match = 40 * norm(field) + 15 * norm(audience) + 10 * norm(use);
 
   const special = event.kind === 'national' || event.kind === 'religious';
-  const raw = special ? 35 + match : (match * 100) / 65;
+  const raw = special ? 70 + match : (match * 100) / 65;
 
   let factor = 1;
   if (sel.sector) {
@@ -56,7 +56,7 @@ export function scoreEvent(event: EventWithTags, sel: Selections): { score: numb
   }
   const clamped = Math.min(100, Math.max(0, Math.round(raw * factor)));
   // National and religious occasions are never scored below their base, whatever the sector.
-  const score = special ? Math.max(35, clamped) : clamped;
+  const score = special ? Math.max(70, clamped) : clamped;
 
   const reasons: Reason[] = [];
   if (event.kind === 'national') reasons.push({ ar: 'مناسبة وطنية', en: 'National occasion' });

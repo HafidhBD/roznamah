@@ -33,15 +33,15 @@ describe('scoreEvent', () => {
     expect(scoreEvent(healthDay, s).score).toBe(62);
   });
 
-  it('national day scores at least 35 for any selection', () => {
-    expect(scoreEvent(nationalDay, sel()).score).toBeGreaterThanOrEqual(35);
-    expect(scoreEvent(nationalDay, sel({ fields: ['sports'], uses: ['x'] })).score).toBeGreaterThanOrEqual(35);
+  it('national day scores at least 70 for any selection', () => {
+    expect(scoreEvent(nationalDay, sel()).score).toBeGreaterThanOrEqual(70);
+    expect(scoreEvent(nationalDay, sel({ fields: ['sports'], uses: ['x'] })).score).toBeGreaterThanOrEqual(70);
   });
 
   it('national/religious floor holds for every sector', () => {
     for (const sector of [null, 'government', 'private', 'semi_government', 'nonprofit']) {
-      expect(scoreEvent(nationalDay, sel({ sector })).score).toBeGreaterThanOrEqual(35);
-      expect(scoreEvent(ev('religious', [gov(1)]), sel({ sector })).score).toBeGreaterThanOrEqual(35);
+      expect(scoreEvent(nationalDay, sel({ sector })).score).toBeGreaterThanOrEqual(70);
+      expect(scoreEvent(ev('religious', [gov(1)]), sel({ sector })).score).toBeGreaterThanOrEqual(70);
     }
   });
 
@@ -61,11 +61,11 @@ describe('scoreEvent', () => {
   it('empty selections: only national/religious score > 0', () => {
     expect(scoreEvent(healthDay, sel()).score).toBe(0);
     expect(scoreEvent(ev('commercial', [priv(3)]), sel()).score).toBe(0);
-    expect(scoreEvent(ev('religious', []), sel()).score).toBe(35);
+    expect(scoreEvent(ev('religious', []), sel()).score).toBe(70);
   });
 
   it('applies the sector factor for untagged sector and clamps', () => {
-    expect(scoreEvent(nationalDay, sel({ sector: 'government' })).score).toBe(35); // floored: 35 * 0.9 would be 32
+    expect(scoreEvent(nationalDay, sel({ sector: 'government' })).score).toBe(70); // floored: 70 * 0.9 would be 63
     const full = ev('national', [
       tag('field', 'a', 'أ', 'A', 3), tag('audience', 'b', 'ب', 'B', 3), tag('use', 'c', 'ج', 'C', 3), gov(3),
     ]);

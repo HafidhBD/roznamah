@@ -25,15 +25,12 @@ test('plan builder: recommend, add, persist, isolate', async ({ page, browser })
 
   const cards = page.getByTestId('rec-card');
   await expect(cards.first()).toBeVisible();
-  await expect(cards.first().getByTestId('rec-reasons')).toContainText('الصحة');
+  // national/religious occasions rank first; a health-matched card follows within the first page
+  await expect(page.getByTestId('rec-reasons').filter({ hasText: 'الصحة' }).first()).toBeVisible();
   await expect(cards).toHaveCount(12);
+  await expect(page.getByTestId('rec-card').filter({ hasText: 'اليوم الوطني' }).first()).toBeVisible();
   await page.getByTestId('show-more').click();
   await expect(cards).toHaveCount(24);
-  const national = page.getByTestId('rec-card').filter({ hasText: 'اليوم الوطني' });
-  while (!(await national.count()) && (await page.getByTestId('show-more').count())) {
-    await page.getByTestId('show-more').click();
-  }
-  await expect(page.getByTestId('rec-card').filter({ hasText: 'اليوم الوطني' }).first()).toBeVisible();
 
   await cards.nth(0).getByTestId('rec-toggle').click();
   await cards.nth(1).getByTestId('rec-toggle').click();
