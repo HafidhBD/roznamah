@@ -23,6 +23,8 @@
     "drizzle-orm": "^0.45.4",
     "next": "^16.4.6",
     "node-vibrant": "^4.0.4",
+    "pdf-lib": "^1.17.1",
+    "playwright": "^1.65.1",
     "postgres": "^4.1.1",
     "react": "^19.3.1",
     "react-dom": "^19.3.1",

@@ -1,23 +1,15 @@
-import { timingSafeEqual } from 'node:crypto';
 import { eq, sql } from 'drizzle-orm';
 import { NextResponse } from 'next/server';
 import { db } from '@/db/client';
 import { calendars } from '@/db/schema';
 import { draftFromRequest, withDraftCookie } from '@/lib/draft';
 import { deleteLogo, LogoError, logoUrlFor, MAX_LOGO_BYTES, processLogo, readLogo } from '@/lib/logo';
+import { renderSecretMatches } from '@/lib/render-secret';
 import { ownLogoPath } from '@/lib/snapshot';
 
 export const runtime = 'nodejs';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
-
-function secretMatches(given: string | null): boolean {
-  const secret = process.env.RENDER_SECRET;
-  if (!secret || !given) return false;
-  const a = Buffer.from(given);
-  const b = Buffer.from(secret);
-  return a.length === b.length && timingSafeEqual(a, b);
-}
 
 /** Updates only design.logoPath, so a concurrent design PATCH is not overwritten. */
 const setLogoPath = (path: string | null) =>
@@ -31,7 +23,7 @@ export async function GET(req: Request) {
   let calendar: { id: string; logoPath: string | null } | null = null;
   const calendarId = url.searchParams.get('calendarId');
   if (calendarId) {
-    if (!UUID.test(calendarId) || !secretMatches(url.searchParams.get('secret'))) return notFound();
+    if (!UUID.test(calendarId) || !renderSecretMatches(url.searchParams.get('secret'))) return notFound();
     const [row] = await db.select().from(calendars).where(eq(calendars.id, calendarId));
     if (row) calendar = { id: row.id, logoPath: row.design.logoPath };
   } else {

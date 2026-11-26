@@ -2,17 +2,10 @@
 import { t, type Lang, type MessageKey } from '@/i18n/core';
 import { toHijri } from '@/lib/dates/hijri';
 import type { Design } from '@/lib/design';
+import { PAGE_MM } from '@/lib/print-sizes';
 import type { CalendarSnapshot, SnapshotEvent, SnapshotMonth } from '@/lib/snapshot-core';
 
-export type PageFormat = { kind: 'wall'; size: 'A4' | 'A3'; bleed: boolean };
-export const DEFAULT_FORMAT: PageFormat = { kind: 'wall', size: 'A4', bleed: false };
-
-/** Trim size in mm (portrait). */
-export const PAGE_MM: Record<PageFormat['size'], { w: number; h: number }> = {
-  A4: { w: 210, h: 297 },
-  A3: { w: 297, h: 420 },
-};
-export const BLEED_MM = 3;
+export { BLEED_MM, DEFAULT_FORMAT, PAGE_MM, type PageFormat } from '@/lib/print-sizes';
 /** Every template is drawn on an A4 artboard and scaled to the trim size. */
 export const ARTBOARD = PAGE_MM.A4;
 

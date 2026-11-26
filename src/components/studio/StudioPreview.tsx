@@ -24,7 +24,7 @@ export function StudioPreview({ lang, snapshot }: { lang: Lang; snapshot: Calend
   const box = useRef<HTMLDivElement>(null);
   const [scale, setScale] = useState(0);
   const format = DEFAULT_FORMAT;
-  const { w, h } = pageSizeMm(format);
+  const { width: w, height: h } = pageSizeMm(format);
   const wPx = w * PX_PER_MM;
   const hPx = h * PX_PER_MM;
 

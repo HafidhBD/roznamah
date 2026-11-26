@@ -3,28 +3,28 @@
  * the very same markup; the studio only scales the page to fit its container.
  */
 import type { CSSProperties, ReactNode } from 'react';
+import { pageSizeMm } from '@/lib/print-sizes';
 import type { CalendarSnapshot } from '@/lib/snapshot-core';
 import { CoverPage } from './CoverPage';
+import { CropMarks } from './CropMarks';
 import { MonthPage } from './MonthPage';
-import { ARTBOARD, BLEED_MM, DEFAULT_FORMAT, PAGE_MM, readableOn, type PageFormat } from './doc';
+import { ARTBOARD, DEFAULT_FORMAT, PAGE_MM, readableOn, type PageFormat } from './doc';
 import { FONT_FAMILY, KUFI } from './fonts';
 import { makeContext } from './primitives';
 import './calendar-document.css';
 
 export type { PageFormat } from './doc';
+export { pageSizeMm } from '@/lib/print-sizes';
 
-/** Outer page size in mm, including bleed. */
-export function pageSizeMm(format: PageFormat) {
-  const trim = PAGE_MM[format.size];
-  const bleed = format.bleed ? BLEED_MM : 0;
-  return { w: trim.w + 2 * bleed, h: trim.h + 2 * bleed, bleed };
-}
-
+/**
+ * One sheet: the trim-sized artboard sits `bleed` mm in from the sheet edge (edge-touching
+ * backgrounds reach out by --bleed); with bleed, crop marks fill the corners.
+ */
 function Page({ kind, format, children }: { kind: 'cover' | 'month'; format: PageFormat; children: ReactNode }) {
-  const { w, h, bleed } = pageSizeMm(format);
+  const { width, height, bleed } = pageSizeMm(format);
   const scale = PAGE_MM[format.size].w / ARTBOARD.w;
   return (
-    <section className="rz-page" data-page={kind} style={{ width: `${w}mm`, height: `${h}mm` }}>
+    <section className="rz-page" data-page={kind} style={{ width: `${width}mm`, height: `${height}mm` }}>
       <div
         className="rz-art"
         style={
@@ -40,6 +40,7 @@ function Page({ kind, format, children }: { kind: 'cover' | 'month'; format: Pag
       >
         {children}
       </div>
+      <CropMarks width={width} height={height} bleed={bleed} />
     </section>
   );
 }
@@ -56,7 +57,7 @@ export function CalendarDocument({ data, format = DEFAULT_FORMAT, mode, pages }:
   const ctx = makeContext(data);
   const { design, langs } = ctx;
   const want = (i: number) => !pages || pages.includes(i);
-  const { w, h } = pageSizeMm(format);
+  const { width, height } = pageSizeMm(format);
   const vars = {
     '--p': design.primary,
     '--p-ink': readableOn(design.primary),
@@ -75,7 +76,7 @@ export function CalendarDocument({ data, format = DEFAULT_FORMAT, mode, pages }:
       dir={langs.dir}
       style={vars}
     >
-      {mode === 'print' && <style>{`@page { size: ${w}mm ${h}mm; margin: 0; }`}</style>}
+      {mode === 'print' && <style>{`@page { size: ${width}mm ${height}mm; margin: 0; }`}</style>}
       {want(0) && (
         <Page kind="cover" format={format}>
           <CoverPage ctx={ctx} />

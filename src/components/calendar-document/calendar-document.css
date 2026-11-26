@@ -935,3 +935,11 @@
   font-size: 7pt;
   color: var(--muted);
 }
+
+/* ---------- print: crop marks (bleed only) ---------- */
+
+.rz-crop-marks {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}

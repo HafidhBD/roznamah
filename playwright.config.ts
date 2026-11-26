@@ -1,9 +1,12 @@
 import { defineConfig } from '@playwright/test';
 import { existsSync } from 'node:fs';
 
-try {
-  process.loadEnvFile('.env.local');
-} catch {}
+// Same env as `next dev` sees (.env.local wins over .env.development; loadEnvFile never overrides).
+for (const file of ['.env.local', '.env.development']) {
+  try {
+    process.loadEnvFile(file);
+  } catch {}
+}
 
 const chromium = '/opt/pw-browsers/chromium';
 
