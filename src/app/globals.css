@@ -1,0 +1,32 @@
+@import 'tailwindcss';
+
+:root {
+  --brand: #6d3df5;
+  --brand-contrast: #ffffff;
+  --bg: #faf9fd;
+  --surface: #ffffff;
+  --ink: #1b1630;
+  --ink-muted: #5d5873;
+  --line: #e6e2f0;
+  --font-ui: 'IBM Plex Sans Arabic', system-ui, -apple-system, 'Segoe UI', sans-serif;
+}
+
+@theme inline {
+  --color-brand: var(--brand);
+  --color-surface: var(--surface);
+  --color-ink: var(--ink);
+  --color-muted: var(--ink-muted);
+  --color-line: var(--line);
+  --font-sans: var(--font-ui);
+}
+
+html {
+  overflow-x: hidden;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--font-ui);
+}

@@ -1,0 +1,17 @@
+export const ar = {
+  'brand.name': 'رَزنامة',
+  'brand.tagline': 'قوِّم عامك بمناسباتك',
+  'nav.home': 'الرئيسية',
+  'nav.calendar': 'التقويم',
+  'nav.studio': 'التصميم',
+  'nav.primary': 'التنقل الرئيسي',
+  'nav.mobile': 'التنقل السفلي',
+  'lang.toggle': 'English',
+  'lang.toggleLabel': 'التبديل إلى الإنجليزية',
+  'home.title': 'ابنِ تقويم مناسباتك لـ١٢ شهرًا',
+  'home.subtitle': 'تقويم بهوية مؤسستك، جاهز للطباعة والمشاركة.',
+  'calendar.title': 'التقويم',
+  'calendar.placeholder': 'سيظهر تقويمك هنا.',
+  'studio.title': 'استوديو الهوية',
+  'studio.placeholder': 'صمّم هوية تقويمك هنا.',
+} as const;

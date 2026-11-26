@@ -1,0 +1,13 @@
+services:
+  db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: roznamah
+      POSTGRES_PASSWORD: roznamah
+      POSTGRES_DB: roznamah
+    ports:
+      - '5432:5432'
+    volumes:
+      - roznamah-db:/var/lib/postgresql/data
+volumes:
+  roznamah-db:
