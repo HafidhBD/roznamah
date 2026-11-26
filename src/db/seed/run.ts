@@ -4,48 +4,69 @@ import { eventOccurrences, eventTags, events, taxonomyTerms } from '../schema';
 import { taxonomySeed } from './taxonomy';
 import { eventsSeed } from './events';
 
-/** Idempotent: upserts taxonomy by (group, key) and events by slug; rewrites each seeded event's tags. */
-export async function runSeed(): Promise<{ taxonomy: number; events: number }> {
+export interface SeedOptions {
+  /** Overwrite existing rows with seed values (dev only). Default: insert-only, never touch existing rows. */
+  update?: boolean;
+}
+
+/**
+ * Safe to run on every release: by default it only inserts rows that do not exist yet
+ * (taxonomy by group+key, events by slug, tags by event+term, occurrences by event+year)
+ * and never modifies admin edits. With `update: true` it upserts and rewrites tags.
+ */
+export async function runSeed(
+  opts: SeedOptions = {},
+): Promise<{ taxonomy: number; events: number }> {
+  const update = opts.update === true;
   await db.transaction(async (tx) => {
     for (const t of taxonomySeed) {
-      await tx
-        .insert(taxonomyTerms)
-        .values(t)
-        .onConflictDoUpdate({
+      const ins = tx.insert(taxonomyTerms).values(t);
+      if (update) {
+        await ins.onConflictDoUpdate({
           target: [taxonomyTerms.group, taxonomyTerms.key],
           set: { labelAr: t.labelAr, labelEn: t.labelEn, sort: t.sort },
         });
+      } else {
+        await ins.onConflictDoNothing({ target: [taxonomyTerms.group, taxonomyTerms.key] });
+      }
     }
     const terms = await tx.select().from(taxonomyTerms);
     const termId = new Map(terms.map((t) => [`${t.group}:${t.key}`, t.id]));
 
     for (const e of eventsSeed) {
       const { tags, occurrences, ...row } = e;
-      const [saved] = await tx
-        .insert(events)
-        .values(row)
-        .onConflictDoUpdate({ target: events.slug, set: { ...row, updatedAt: dsql`now()` } })
-        .returning({ id: events.id });
+      const ins = tx.insert(events).values(row);
+      const [saved] = update
+        ? await ins
+            .onConflictDoUpdate({ target: events.slug, set: { ...row, updatedAt: dsql`now()` } })
+            .returning({ id: events.id })
+        : await ins.onConflictDoNothing({ target: events.slug }).returning({ id: events.id });
+      const eventId =
+        saved?.id ??
+        (await tx.select({ id: events.id }).from(events).where(eq(events.slug, e.slug)))[0].id;
 
-      await tx.delete(eventTags).where(eq(eventTags.eventId, saved.id));
-      await tx.insert(eventTags).values(
-        tags.map((t) => {
-          const id = termId.get(`${t.group}:${t.key}`);
-          if (id === undefined) throw new Error(`Taxonomy term missing: ${t.group}:${t.key}`);
-          return { eventId: saved.id, termId: id, weight: t.weight };
-        }),
-      );
+      if (update) await tx.delete(eventTags).where(eq(eventTags.eventId, eventId));
+      const tagRows = tags.map((t) => {
+        const id = termId.get(`${t.group}:${t.key}`);
+        if (id === undefined) throw new Error(`Taxonomy term missing: ${t.group}:${t.key}`);
+        return { eventId, termId: id, weight: t.weight };
+      });
+      await tx.insert(eventTags).values(tagRows).onConflictDoNothing();
+
       for (const o of occurrences) {
-        await tx
+        const oi = tx
           .insert(eventOccurrences)
-          .values({ eventId: saved.id, year: o.year, startDate: o.startDate, status: o.status, sourceUrl: o.sourceUrl })
-          .onConflictDoUpdate({
+          .values({ eventId, year: o.year, startDate: o.startDate, status: o.status, sourceUrl: o.sourceUrl });
+        if (update) {
+          await oi.onConflictDoUpdate({
             target: [eventOccurrences.eventId, eventOccurrences.year],
             set: { startDate: o.startDate, status: o.status, sourceUrl: o.sourceUrl ?? null, updatedAt: dsql`now()` },
           });
+        } else {
+          await oi.onConflictDoNothing();
+        }
       }
     }
-    // Sanity: every seeded slug exists.
     const n = await tx
       .select({ id: events.id })
       .from(events)
@@ -56,7 +77,7 @@ export async function runSeed(): Promise<{ taxonomy: number; events: number }> {
 }
 
 if (process.argv[1] && /seed[\\/]run\.[cm]?[tj]s$/.test(process.argv[1])) {
-  runSeed()
+  runSeed({ update: process.argv.includes('--update') })
     .then((r) => {
       console.log(`Seeded ${r.taxonomy} taxonomy terms and ${r.events} events`);
       return sql.end();

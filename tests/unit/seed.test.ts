@@ -1,5 +1,5 @@
 import { afterAll, describe, expect, it } from 'vitest';
-import { count, eq } from 'drizzle-orm';
+import { and, count, eq } from 'drizzle-orm';
 import { db, sql } from '@/db/client';
 import { eventOccurrences, eventTags, events, taxonomyTerms } from '@/db/schema';
 import { runSeed } from '@/db/seed/run';
@@ -93,6 +93,37 @@ describe('seed', () => {
       expect(e.contentIdeaEn.length, e.slug).toBeGreaterThan(10);
       if (e.kind !== 'commercial') expect(e.sourceUrl, e.slug).toMatch(/^https:\/\//);
     }
+  });
+});
+
+describe('seed is non-destructive', () => {
+  it('keeps admin edits by default and restores them with update:true', async () => {
+    await runSeed();
+    const [ev] = await db.select().from(events).where(eq(events.slug, 'national-day'));
+    const [tag] = await db.select().from(eventTags).where(eq(eventTags.eventId, ev.id)).limit(1);
+    const orig = { title: ev.titleAr, weight: tag.weight };
+    const newWeight = tag.weight === 1 ? 2 : 1;
+    const tagKey = and(eq(eventTags.eventId, ev.id), eq(eventTags.termId, tag.termId));
+    await db.update(events).set({ titleAr: 'تعديل المشرف' }).where(eq(events.id, ev.id));
+    await db.update(eventTags).set({ weight: newWeight }).where(tagKey);
+
+    await runSeed();
+    const [after] = await db.select().from(events).where(eq(events.id, ev.id));
+    const [afterTag] = await db.select().from(eventTags).where(tagKey);
+    expect(after.titleAr).toBe('تعديل المشرف');
+    expect(afterTag.weight).toBe(newWeight);
+
+    await runSeed({ update: true });
+    const [restored] = await db.select().from(events).where(eq(events.id, ev.id));
+    const [restoredTag] = await db.select().from(eventTags).where(tagKey);
+    expect(restored.titleAr).toBe(orig.title);
+    expect(restoredTag.weight).toBe(orig.weight);
+  });
+
+  it('no longer seeds unofficial occasions', () => {
+    const slugs = eventsSeed.map((e) => e.slug);
+    expect(slugs).not.toContain('isra-miraj');
+    expect(slugs).not.toContain('laylat-al-qadr');
   });
 });
 

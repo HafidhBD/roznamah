@@ -145,16 +145,6 @@ const DEFS: Def[] = [
     f: 'culture:2', a: 'general:3 employees:2 families:2', u: 'marketing:2 internal:3', prep: 7,
   },
   {
-    s: 'isra-miraj', k: 'religious', r: 'h', m: 7, d: 27,
-    ar: 'ذكرى الإسراء والمعراج', en: 'Isra and Mi’raj',
-    da: 'ذكرى رحلة الإسراء والمعراج، وتُذكر تقليديًا في السابع والعشرين من رجب.',
-    de: 'Commemoration of the Night Journey and Ascension, traditionally marked on 27 Rajab.',
-    ia: 'انشروا محتوى توعويًا هادئًا عن معاني الرحلة دون حملات ترويجية.',
-    ie: 'Share calm, informative content on the meaning of the journey, avoiding promotional campaigns.',
-    icon: '✨', color: '#6a57c2', src: [UQ, UQ_URL], sec: 'all',
-    f: 'culture:2', a: 'general:3 families:2', u: 'awareness:3', prep: 7,
-  },
-  {
     s: 'ramadan-start', k: 'religious', r: 'h', m: 9, d: 1,
     ar: 'بداية شهر رمضان', en: 'Beginning of Ramadan',
     da: 'موسم مجتمعي مهم للحملات والفعاليات والمبادرات الداخلية. يثبت التاريخ بعد الإعلان الرسمي.',
@@ -164,16 +154,6 @@ const DEFS: Def[] = [
     icon: '🌙', color: '#8d692e', src: [UQ, UQ_URL], sec: 'all',
     f: 'culture:3 food_hospitality:3 retail:3 tourism:2 hr:2', a: 'general:3 families:3 employees:3 customers:3',
     u: 'marketing:3 csr:3 event:3 internal:3', prep: 30,
-  },
-  {
-    s: 'laylat-al-qadr', k: 'religious', r: 'h', m: 9, d: 27,
-    ar: 'ليلة القدر', en: 'Laylat al-Qadr',
-    da: 'ليلة عظيمة في العشر الأواخر من رمضان، وتُتحرّى في الليالي الوترية وأشهرها ليلة السابع والعشرين.',
-    de: 'The Night of Decree, sought in the odd nights of Ramadan’s last ten days, most often the 27th.',
-    ia: 'انشروا دعاءً أو رسالة تهنئة هادئة بتصميم راقٍ، وتجنبوا العروض التجارية.',
-    ie: 'Post a quiet supplication or greeting in an elegant design, avoiding commercial offers.',
-    icon: '⭐', color: '#6a57c2', src: [UQ, UQ_URL], sec: 'all',
-    f: 'culture:2', a: 'general:3 families:2', u: 'awareness:3', prep: 7,
   },
   {
     s: 'eid-al-fitr', k: 'religious', r: 'h', m: 10, d: 1, n: 3,
