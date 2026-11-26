@@ -9,18 +9,22 @@ for (const file of ['.env.local', '.env.development']) {
 }
 
 const chromium = '/opt/pw-browsers/chromium';
+const port = process.env.PORT || '3000';
+const baseURL = `http://localhost:${port}`;
 
 export default defineConfig({
   testDir: 'tests/e2e',
   reporter: 'list',
   use: {
-    baseURL: 'http://localhost:3000',
+    baseURL,
     launchOptions: existsSync(chromium) ? { executablePath: chromium } : {},
   },
   webServer: {
     command: 'npm run dev',
-    url: 'http://localhost:3000',
+    url: baseURL,
     reuseExistingServer: true,
     timeout: 120_000,
+    // Downloads e2e reads emails from the in-memory outbox (GET /api/test/outbox).
+    env: { PORT: port, EMAIL_TRANSPORT: 'memory' },
   },
 });

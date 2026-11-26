@@ -9,10 +9,16 @@ import { t, type Lang, type MessageKey } from '@/i18n/core';
 import { FONT_KEYS, HEX_COLOR, TEMPLATE_KEYS, type Design, type TemplateKey } from '@/lib/design';
 import type { CalendarEventView } from '@/lib/draft';
 import { assembleSnapshot } from '@/lib/snapshot-core';
+import { DownloadDialog, type SectorOption } from './DownloadDialog';
 import { StudioPreview } from './StudioPreview';
 
 type Props = {
   lang: Lang;
+  sectors: SectorOption[];
+  initialSector: string | null;
+  turnstileSiteKey: string | null;
+  /** Open the download dialog on load (the download page's «اطلب مرة أخرى» link). */
+  openDownload?: boolean;
   startMonth: string;
   initialDesign: Design;
   initialLogoUrl: string | null;
@@ -29,31 +35,37 @@ const SAVE_DELAY = 400;
 function useDesignSaver() {
   const pending = useRef<Patch>({});
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const inflight = useRef(0);
+  const inflight = useRef(new Set<Promise<boolean>>());
   const [state, setState] = useState<SaveState>('saved');
 
   const flush = useCallback(async (keepalive = false) => {
     timer.current = null;
     const body = pending.current;
     pending.current = {};
-    if (!Object.keys(body).length) return;
-    inflight.current++;
-    let ok = false;
-    try {
-      const res = await fetch('/api/draft', {
-        method: 'PATCH',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ design: body }),
-        keepalive,
-      });
-      ok = res.ok;
-    } catch {
-      ok = false;
-    }
-    inflight.current--;
+    if (!Object.keys(body).length) return true;
+    const request = fetch('/api/draft', {
+      method: 'PATCH',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ design: body }),
+      keepalive,
+    }).then(
+      (res) => res.ok,
+      () => false,
+    );
+    inflight.current.add(request);
+    const ok = await request;
+    inflight.current.delete(request);
     if (!ok) setState('error');
-    else if (!inflight.current && !timer.current && !Object.keys(pending.current).length) setState('saved');
+    else if (!inflight.current.size && !timer.current && !Object.keys(pending.current).length) setState('saved');
+    return ok;
   }, []);
+
+  /** Sends pending changes now and waits for every save in flight (before freezing a download). */
+  const settle = useCallback(async () => {
+    if (timer.current) clearTimeout(timer.current);
+    const results = await Promise.all([flush(), ...inflight.current]);
+    return results.every(Boolean);
+  }, [flush]);
 
   const queue = useCallback(
     (patch: Patch) => {
@@ -71,7 +83,7 @@ function useDesignSaver() {
     return () => window.removeEventListener('pagehide', onHide);
   }, [flush]);
 
-  return { state, queue };
+  return { state, queue, settle };
 }
 
 function Section({ title, children }: { title: string; children: ReactNode }) {
@@ -238,7 +250,19 @@ const TEMPLATE_TEXT: Record<TemplateKey, { name: MessageKey; desc: MessageKey }>
   official: { name: 'studio.template.official', desc: 'studio.template.official.desc' },
 };
 
-export function StudioPanel({ lang, startMonth, initialDesign, initialLogoUrl, initialPalette, events }: Props) {
+export function StudioPanel({
+  lang,
+  sectors,
+  initialSector,
+  turnstileSiteKey,
+  openDownload = false,
+  startMonth,
+  initialDesign,
+  initialLogoUrl,
+  initialPalette,
+  events,
+}: Props) {
+  const [downloadOpen, setDownloadOpen] = useState(openDownload);
   const [design, setDesign] = useState<Design>(initialDesign);
   const [logoUrl, setLogoUrl] = useState(initialLogoUrl);
   const [palette, setPalette] = useState(initialPalette);
@@ -316,9 +340,9 @@ export function StudioPanel({ lang, startMonth, initialDesign, initialLogoUrl, i
           <button
             type="button"
             data-testid="download"
-            disabled
-            title={t(lang, 'studio.download.soon')}
-            className="flex min-h-11 cursor-not-allowed items-center gap-2 rounded-xl bg-brand px-5 text-sm font-semibold text-white opacity-60 shadow-sm"
+            aria-haspopup="dialog"
+            onClick={() => setDownloadOpen(true)}
+            className="flex min-h-11 items-center gap-2 rounded-xl bg-brand px-5 text-sm font-semibold text-white shadow-sm transition hover:bg-brand/90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand"
           >
             <svg viewBox="0 0 20 20" className="size-4" aria-hidden>
               <path d="M10 3v9m0 0-3.5-3.5M10 12l3.5-3.5M4 15.5h12" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
@@ -327,6 +351,18 @@ export function StudioPanel({ lang, startMonth, initialDesign, initialLogoUrl, i
           </button>
         </div>
       </header>
+
+      {downloadOpen && (
+        <DownloadDialog
+          lang={lang}
+          orgName={(lang === 'en' ? design.orgNameEn || design.orgNameAr : design.orgNameAr || design.orgNameEn) ?? ''}
+          sector={initialSector}
+          sectors={sectors}
+          turnstileSiteKey={turnstileSiteKey}
+          beforeSubmit={saver.settle}
+          onClose={() => setDownloadOpen(false)}
+        />
+      )}
 
       {events.length === 0 && (
         <p className="flex flex-wrap items-center gap-2 rounded-2xl border border-dashed border-line bg-surface px-4 py-3 text-sm text-muted">
