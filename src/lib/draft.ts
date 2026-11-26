@@ -144,7 +144,9 @@ export async function listEventViews(
       kind: 'custom',
       color: ce.customColor ?? primary,
       icon: '★',
-      occurrences: [{ eventId: ce.id, start: date, end: date, status: 'confirmed' }],
+      occurrences: inSpan(calendar, date)
+        ? [{ eventId: ce.id, start: date, end: date, status: 'confirmed' }]
+        : [],
       custom: true,
     };
   });

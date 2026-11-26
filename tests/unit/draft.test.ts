@@ -113,6 +113,19 @@ describe('draft API', () => {
     expect(ev.occurrences[0]).toMatchObject({ start: `${year}-05-10`, status: 'confirmed' });
   });
 
+  it('custom event outside the current span stays but has no occurrences', async () => {
+    const { token } = await fresh();
+    await PATCH(req('PATCH', '/api/draft', token, { startMonth: '2027-01' }));
+    const add = await postEvent(req('POST', '/api/draft/events', token, { custom: { titleAr: 'حدث', date: '2027-05-10' } }));
+    expect((await add.json()).events[0].occurrences).toHaveLength(1);
+    await PATCH(req('PATCH', '/api/draft', token, { startMonth: '2028-01' }));
+    const j = await (await GET(req('GET', '/api/draft', token))).json();
+    expect(j.events).toHaveLength(1);
+    expect(j.events[0].occurrences).toEqual([]);
+    await PATCH(req('PATCH', '/api/draft', token, { startMonth: '2027-01' }));
+    expect((await (await GET(req('GET', '/api/draft', token))).json()).events[0].occurrences).toHaveLength(1);
+  });
+
   it('adding the same eventId twice is idempotent; unknown ids give 400', async () => {
     const { token } = await fresh();
     const [id] = await someEvents(1);
