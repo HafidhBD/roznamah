@@ -11,7 +11,8 @@
     "typecheck": "tsc --noEmit",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
-    "db:migrate:test": "DATABASE_URL=postgresql://roznamah:roznamah@localhost:5432/roznamah_test drizzle-kit migrate"
+    "db:migrate:test": "DATABASE_URL=postgresql://roznamah:roznamah@localhost:5432/roznamah_test drizzle-kit migrate",
+    "db:seed": "tsx src/db/seed/run.ts"
   },
   "dependencies": {
     "@fontsource/ibm-plex-sans-arabic": "^5.3.0",
@@ -30,6 +31,7 @@
     "drizzle-kit": "^0.31.11",
     "postcss": "^8.5.33",
     "tailwindcss": "^4.3.5",
+    "tsx": "^4.23.15",
     "typescript": "^7.0.2",
     "vitest": "^5.1.2"
   }
