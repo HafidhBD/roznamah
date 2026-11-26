@@ -107,9 +107,10 @@ test('occurrence override: confirm a Hijri date from the editor', async ({ page,
 
 test('leads: table, filters, pagination and Excel export', async ({ page, baseURL }) => {
   await sql`delete from leads where org_name like ${ORG + '%'}`;
+  // Dated an hour ahead so they stay the newest even while download specs add leads in parallel.
   for (let i = 0; i < 27; i++) {
     await sql`insert into leads (email, org_name, sector, fields, phone, created_at)
-              values (${`lead${i}@example.com`}, ${`${ORG} ${i}`}, ${i === 0 ? 'nonprofit' : 'private'}, ${sql.json(['health'])}, '0500000000', now() - ${i} * interval '1 minute')`;
+              values (${`lead${i}@example.com`}, ${`${ORG} ${i}`}, ${i === 0 ? 'nonprofit' : 'private'}, ${sql.json(['health'])}, '0500000000', now() + interval '1 hour' - ${i} * interval '1 minute')`;
   }
   await signInAs(page, adminToken, baseURL);
   await page.goto('/admin/leads');
