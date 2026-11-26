@@ -40,3 +40,8 @@ export function isUniqueViolation(e: unknown): boolean {
   const code = (x: unknown) => (x as { code?: string } | undefined)?.code;
   return code(e) === '23505' || code((e as { cause?: unknown }).cause) === '23505';
 }
+
+export function isForeignKeyViolation(e: unknown): boolean {
+  const code = (x: unknown) => (x as { code?: string } | undefined)?.code;
+  return code(e) === '23503' || code((e as { cause?: unknown }).cause) === '23503';
+}

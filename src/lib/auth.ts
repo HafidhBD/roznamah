@@ -28,7 +28,25 @@ declare global {
   var __roznamahMail: { to: string; url: string }[] | undefined;
 }
 
-async function sendVerificationRequest({ identifier, url }: { identifier: string; url: string }) {
+/** The one origin links and CSRF checks are built from. APP_URL is required in production. */
+export function appOrigin(): string {
+  const raw = process.env.APP_URL;
+  if (!raw) {
+    if (process.env.NODE_ENV === 'production') throw new Error('APP_URL is not set');
+    return 'http://localhost:3000';
+  }
+  return new URL(raw).origin;
+}
+
+if (process.env.APP_URL || process.env.NODE_ENV !== 'production') process.env.AUTH_URL = appOrigin();
+
+const escapeHtml = (s: string) =>
+  s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+
+async function sendVerificationRequest({ identifier, url: rawUrl }: { identifier: string; url: string }) {
+  // Never trust the origin the request arrived with (Host / X-Forwarded-Host): keep path+query only.
+  const parsed = new URL(rawUrl);
+  const url = `${appOrigin()}${parsed.pathname}${parsed.search}`;
   const dev = process.env.NODE_ENV !== 'production';
   const apiKey = process.env.RESEND_API_KEY;
   if (dev && (process.env.EMAIL_TRANSPORT === 'memory' || !apiKey)) {
@@ -44,7 +62,7 @@ async function sendVerificationRequest({ identifier, url }: { identifier: string
       from: process.env.EMAIL_FROM,
       to: identifier,
       subject: t('ar', 'admin.email.subject'),
-      html: `<div dir="rtl" style="font-family:sans-serif"><p>${t('ar', 'admin.email.body')}</p><p><a href="${url}">${t('ar', 'admin.email.cta')}</a></p></div>`,
+      html: `<div dir="rtl" style="font-family:sans-serif"><p>${t('ar', 'admin.email.body')}</p><p><a href="${escapeHtml(url)}">${t('ar', 'admin.email.cta')}</a></p></div>`,
       text: `${t('ar', 'admin.email.body')}\n${url}`,
     }),
   });
@@ -64,7 +82,8 @@ export const { handlers, signIn, signOut } = NextAuth({
   pages: { signIn: '/admin/sign-in', verifyRequest: '/admin/sign-in?sent=1', error: '/admin/sign-in?error=1' },
   callbacks: {
     // Runs before any user/account row is created: non-admins never get one.
-    signIn: ({ user }) => isAdmin(user.email),
+    // Non-admins get the same verify-request redirect as admins (no token, no mail) so membership is not revealed.
+    signIn: ({ user }) => (isAdmin(user.email) ? true : `${appOrigin()}/api/auth/verify-request?provider=resend&type=email`),
   },
 });
 
@@ -72,7 +91,13 @@ function cookieFromRequest(req: Request): string | undefined {
   const header = req.headers.get('cookie') ?? '';
   for (const part of header.split(';')) {
     const [name, ...rest] = part.trim().split('=');
-    if ((SESSION_COOKIES as readonly string[]).includes(name)) return decodeURIComponent(rest.join('='));
+    if ((SESSION_COOKIES as readonly string[]).includes(name)) {
+      try {
+        return decodeURIComponent(rest.join('='));
+      } catch {
+        return undefined;
+      }
+    }
   }
   return undefined;
 }
@@ -110,6 +135,16 @@ export async function requireAdmin(req?: Request): Promise<AdminSession> {
   return session;
 }
 
+function mutationGuard(req: Request): Response | null {
+  if (req.method === 'GET' || req.method === 'HEAD') return null;
+  const origin = req.headers.get('origin');
+  if (origin && origin !== appOrigin()) return Response.json({ error: 'bad_origin' }, { status: 403 });
+  if (req.method !== 'DELETE' && !(req.headers.get('content-type') ?? '').toLowerCase().startsWith('application/json')) {
+    return Response.json({ error: 'unsupported_media_type' }, { status: 415 });
+  }
+  return null;
+}
+
 /** Wraps an admin route handler: turns a thrown 403 Response into the response. */
 export function adminRoute<A extends unknown[]>(
   handler: (req: Request, ...args: A) => Promise<Response>,
@@ -117,6 +152,8 @@ export function adminRoute<A extends unknown[]>(
   return async (req, ...args) => {
     try {
       await requireAdmin(req);
+      const guard = mutationGuard(req);
+      if (guard) return guard;
       return await handler(req, ...args);
     } catch (e) {
       if (e instanceof Response) return e;

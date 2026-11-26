@@ -1,6 +1,6 @@
 import { adminRoute } from '@/lib/auth';
 import { eventInputSchema } from '@/lib/admin/event-schema';
-import { createEvent, isUniqueViolation } from '@/lib/admin/events';
+import { createEvent, isForeignKeyViolation, isUniqueViolation } from '@/lib/admin/events';
 
 export const POST = adminRoute(async (req) => {
   let body: unknown;
@@ -14,6 +14,7 @@ export const POST = adminRoute(async (req) => {
   try {
     return Response.json({ id: await createEvent(parsed.data) }, { status: 201 });
   } catch (e) {
+    if (isForeignKeyViolation(e)) return Response.json({ error: 'unknown_term' }, { status: 400 });
     if (isUniqueViolation(e)) {
       return Response.json({ error: 'slug_taken' }, { status: 409 });
     }

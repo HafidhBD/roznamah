@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
+import { NextRequest } from 'next/server';
 import { eq } from 'drizzle-orm';
 import { db, sql } from '@/db/client';
 import { events, users, verificationTokens } from '@/db/schema';
@@ -10,6 +11,7 @@ import { createAdminSession, deleteUserByEmail } from '../helpers/admin-session'
 vi.stubEnv('ADMIN_EMAILS', 'a@waves.sa, B@waves.sa');
 vi.stubEnv('AUTH_SECRET', 'unit-test-secret');
 vi.stubEnv('EMAIL_TRANSPORT', 'memory');
+vi.stubEnv('APP_URL', 'https://app.example.test');
 
 const ADMIN = 'a@waves.sa';
 const OUTSIDER = 'outsider@example.com';
@@ -58,25 +60,29 @@ describe('admin API guards', () => {
 });
 
 describe('sign-in', () => {
-  async function requestLink(email: string) {
+  async function requestLink(email: string, extra: Record<string, string> = {}) {
     const { handlers } = await import('@/lib/auth');
-    const csrf = await handlers.GET(new Request('http://localhost/api/auth/csrf') as never);
+    const csrf = await handlers.GET(new NextRequest('http://localhost/api/auth/csrf'));
     const { csrfToken } = (await csrf.json()) as { csrfToken: string };
     const cookie = csrf.headers
       .getSetCookie()
       .map((c) => c.split(';')[0])
       .join('; ');
     return handlers.POST(
-      new Request('http://localhost/api/auth/signin/resend', {
+      new NextRequest('http://localhost/api/auth/signin/resend', {
         method: 'POST',
-        headers: { 'content-type': 'application/x-www-form-urlencoded', cookie },
+        headers: { 'content-type': 'application/x-www-form-urlencoded', cookie, ...extra },
         body: new URLSearchParams({ csrfToken, email, callbackUrl: '/admin' }),
-      }) as never,
+      }),
     );
   }
 
-  it('refuses non-admins: no token, no user row, no email', async () => {
-    await requestLink(OUTSIDER);
+  it('non-admins get the same verify-request redirect, with no token, user row or email', async () => {
+    const admin = await requestLink(ADMIN);
+    await db.delete(verificationTokens).where(eq(verificationTokens.identifier, ADMIN));
+    const res = await requestLink(OUTSIDER);
+    expect(res.headers.get('location')).toBe(admin.headers.get('location'));
+    expect(res.headers.get('location')).toContain('/api/auth/verify-request');
     expect(await db.select().from(users).where(eq(users.email, OUTSIDER))).toHaveLength(0);
     expect(await db.select().from(verificationTokens).where(eq(verificationTokens.identifier, OUTSIDER))).toHaveLength(0);
     expect(mailbox().some((m) => m.to === OUTSIDER)).toBe(false);
@@ -87,6 +93,56 @@ describe('sign-in', () => {
     expect(await db.select().from(verificationTokens).where(eq(verificationTokens.identifier, ADMIN))).toHaveLength(1);
     await db.delete(verificationTokens).where(eq(verificationTokens.identifier, ADMIN));
     expect(mailbox().some((m) => m.to === ADMIN && m.url.includes('/api/auth/callback/resend'))).toBe(true);
+  });
+
+  it('the link origin is APP_URL even with a poisoned X-Forwarded-Host / Host', async () => {
+    const before = mailbox().length;
+    await requestLink(ADMIN, { 'x-forwarded-host': 'evil.example', 'x-forwarded-proto': 'https', host: 'evil.example' });
+    await db.delete(verificationTokens).where(eq(verificationTokens.identifier, ADMIN));
+    const link = mailbox().slice(before).find((m) => m.to === ADMIN);
+    expect(link).toBeTruthy();
+    expect(new URL(link!.url).origin).toBe('https://app.example.test');
+    expect(link!.url).not.toContain('evil.example');
+  });
+});
+
+describe('admin route hardening', () => {
+  const req = (init: { cookie?: string; origin?: string; type?: string | null; body?: unknown; method?: string }) =>
+    new Request('http://x/api/admin/events', {
+      method: init.method ?? 'POST',
+      headers: {
+        ...(init.type === null ? {} : { 'content-type': init.type ?? 'application/json' }),
+        ...(init.cookie ? { cookie: init.cookie } : {}),
+        ...(init.origin ? { origin: init.origin } : {}),
+      },
+      body: JSON.stringify(init.body ?? {}),
+    });
+  const validEvent = {
+    slug: 'hardening-test', titleAr: 'ا', titleEn: 'a', kind: 'national', recurrence: 'annual_manual',
+    durationDays: 1, prepDays: 1, active: true, tags: [{ termId: 999999, weight: 1 }],
+  };
+
+  it('malformed session cookie is no session (403), not 500', async () => {
+    const { POST } = await import('@/app/api/admin/events/route');
+    expect((await POST(req({ cookie: 'authjs.session-token=%E0%A4%A' }))).status).toBe(403);
+  });
+
+  it('rejects a foreign Origin (403) and a non-JSON content type (415)', async () => {
+    const { POST } = await import('@/app/api/admin/events/route');
+    const cookie = `authjs.session-token=${await createAdminSession(sql, ADMIN)}`;
+    expect((await POST(req({ cookie, origin: 'https://evil.example' }))).status).toBe(403);
+    expect((await POST(req({ cookie, type: 'text/plain' }))).status).toBe(415);
+    expect((await POST(req({ cookie, type: null }))).status).toBe(415);
+    expect((await POST(req({ cookie, origin: 'https://app.example.test' }))).status).toBe(400);
+  });
+
+  it('an unknown tag termId is a 400 unknown_term', async () => {
+    const { POST } = await import('@/app/api/admin/events/route');
+    const cookie = `authjs.session-token=${await createAdminSession(sql, ADMIN)}`;
+    const res = await POST(req({ cookie, body: validEvent }));
+    expect(res.status).toBe(400);
+    expect(await res.json()).toMatchObject({ error: 'unknown_term' });
+    expect(await db.select().from(events).where(eq(events.slug, 'hardening-test'))).toHaveLength(0);
   });
 });
 
