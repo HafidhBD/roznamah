@@ -29,6 +29,49 @@ describe('configProblems', () => {
     expect(configProblems({ NODE_ENV: 'development' })).toEqual([]);
   });
 
+  describe('email driver in production', () => {
+    const { RESEND_API_KEY: _key, ...noResend } = prod;
+    const ms = { MS_TENANT_ID: 't', MS_CLIENT_ID: 'c', MS_CLIENT_SECRET: 'super-secret-value' };
+    const all = (env: Record<string, string>) => configProblems(env).join('\n');
+
+    it('Microsoft Graph alone is complete (sender from MAIL_GRAPH_SENDER or EMAIL_FROM); Resend alone too', () => {
+      expect(configProblems({ ...noResend, ...ms })).toEqual([]);
+      expect(configProblems({ ...noResend, ...ms, MAIL_GRAPH_SENDER: 'box@x.test', MAIL_DRIVER: 'graph' })).toEqual([]);
+      expect(configProblems({ ...prod, MAIL_DRIVER: 'resend' })).toEqual([]);
+    });
+
+    it('neither: one error naming both options', () => {
+      const p = all(noResend);
+      expect(p).toMatch(/no email driver/);
+      expect(p).toMatch(/MS_TENANT_ID, MS_CLIENT_ID and MS_CLIENT_SECRET/);
+      expect(p).toMatch(/RESEND_API_KEY/);
+    });
+
+    it('a partial MS trio names the missing ones, never the values', () => {
+      const p = all({ ...noResend, MS_TENANT_ID: 't', MS_CLIENT_SECRET: 'super-secret-value' });
+      expect(p).toMatch(/missing MS_CLIENT_ID/);
+      expect(p).not.toContain('super-secret-value');
+      const q = all({ ...prod, MS_TENANT_ID: 't', MS_CLIENT_SECRET: 'super-secret-value' });
+      expect(q).toMatch(/MS_TENANT_ID, MS_CLIENT_SECRET set without MS_CLIENT_ID/);
+      expect(q).not.toContain('super-secret-value');
+    });
+
+    it('MAIL_DRIVER=graph without credentials, or without a sender', () => {
+      expect(all({ ...prod, MAIL_DRIVER: 'graph' })).toMatch(/MAIL_DRIVER=graph but MS_TENANT_ID, MS_CLIENT_ID, MS_CLIENT_SECRET are not set/);
+      expect(all({ ...noResend, ...ms, EMAIL_FROM: 'Roznamah' })).toMatch(/MAIL_GRAPH_SENDER is not set/);
+    });
+
+    it('MAIL_DRIVER=resend without a key; unknown or memory MAIL_DRIVER', () => {
+      expect(all({ ...noResend, ...ms, MAIL_DRIVER: 'resend' })).toMatch(/MAIL_DRIVER=resend but RESEND_API_KEY/);
+      expect(all({ ...prod, MAIL_DRIVER: 'smtp' })).toMatch(/MAIL_DRIVER must be graph, resend or memory/);
+      expect(all({ ...prod, MAIL_DRIVER: 'memory' })).toMatch(/MAIL_DRIVER=memory is ignored in production/);
+    });
+
+    it('not checked outside production', () => {
+      expect(configProblems({ NODE_ENV: 'development', MAIL_DRIVER: 'graph' })).toEqual([]);
+    });
+  });
+
   it('flags a Turnstile key without its pair', () => {
     expect(configProblems({ ...prod, TURNSTILE_SITE_KEY: 'site' }).join()).toMatch(/TURNSTILE_SECRET_KEY/);
     expect(configProblems({ ...prod, TURNSTILE_SECRET_KEY: 'secret' }).join()).toMatch(/TURNSTILE_SITE_KEY/);
