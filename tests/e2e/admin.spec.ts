@@ -52,6 +52,7 @@ test('admin shell, overview and editing flag-day updates public recommendations'
     await expect(page.getByRole('navigation', { name: 'تنقل لوحة الإدارة' }).getByText(label)).toBeVisible();
   }
   await expect(page.getByTestId('stat-events')).not.toHaveText('0');
+  await expect(page.getByTestId('needs-date')).toBeVisible();
   // Estimated Hijri dates (e.g. Ramadan 2027) come with a confirm action that opens the editor.
   const confirm = page.getByRole('link', { name: 'تأكيد التاريخ' }).first();
   await expect(confirm).toBeVisible();

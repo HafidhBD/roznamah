@@ -20,6 +20,25 @@ export async function estimatedDates(today: string): Promise<EstimatedItem[]> {
   return out.sort((a, b) => a.start.localeCompare(b.start));
 }
 
+export type NeedsDateItem = { eventId: string; titleAr: string; year: number };
+
+/**
+ * Active annual_manual events (no computable date, e.g. White Friday) with no occurrence in the next
+ * 12 months. `year` is the one to fill in: the later window year without a date, else this year.
+ */
+export async function needsDate(today: string): Promise<NeedsDateItem[]> {
+  const evs = await db.select().from(events).where(eq(events.recurrence, 'annual_manual'));
+  const overrides = await db.select().from(eventOccurrences);
+  const thisYear = Number(today.slice(0, 4));
+  const out: NeedsDateItem[] = [];
+  for (const ev of evs.filter((e) => e.active)) {
+    if (resolveOccurrences(ev, overrides, today, 12).length) continue;
+    const has = (y: number) => overrides.some((o) => o.eventId === ev.id && o.year === y);
+    out.push({ eventId: ev.id, titleAr: ev.titleAr, year: has(thisYear + 1) ? thisYear : thisYear + 1 });
+  }
+  return out.sort((a, b) => a.titleAr.localeCompare(b.titleAr, 'ar'));
+}
+
 /** Start of the current Saudi week (Sunday 00:00, UTC+3). */
 export function weekStart(now: Date): Date {
   const local = new Date(now.getTime() + 3 * 3_600_000);
