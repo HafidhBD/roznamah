@@ -1,43 +1,29 @@
 /**
  * Email-gated download, end to end: studio dialog → memory outbox → download page → worker-rendered
  * PDF. The dev server runs with EMAIL_TRANSPORT=memory (playwright.config webServer env); the worker
- * is spawned here as its own process, exactly like `npm run worker`.
+ * is spawned for the whole run by global-setup.ts, exactly like `npm run worker`.
  */
-import { spawn, type ChildProcess } from 'node:child_process';
-import { rmSync } from 'node:fs';
+import { readFileSync, rmSync } from 'node:fs';
 import path from 'node:path';
 import { expect, test, type Page } from '@playwright/test';
 import postgres from 'postgres';
+import { WORKER_LOG } from './global-setup';
 
 const EMAIL = 'test@example.com';
 const ORG = 'شركة الاختبار للتقنية';
 const SCREENSHOTS = process.env.TASK11_SCREENSHOTS; // optional folder for review screenshots
 
-let worker: ChildProcess | undefined;
-let workerLog = '';
+const workerLog = () => readFileSync(WORKER_LOG, 'utf8');
 const draftTokens: string[] = [];
 let sql: ReturnType<typeof postgres>;
 
-test.beforeAll(async ({}, info) => {
+test.beforeAll(async () => {
   sql = postgres(process.env.DATABASE_URL!);
   // Earlier runs: clear this address so rate limits and reuse never interfere.
   await sql`delete from leads where email = ${EMAIL}`;
-  const baseURL = info.project.use.baseURL!;
-  worker = spawn(process.execPath, ['--import', 'tsx', 'worker/index.ts'], {
-    env: { ...process.env, APP_URL: baseURL },
-    stdio: ['ignore', 'pipe', 'pipe'],
-  });
-  worker.stdout!.on('data', (d) => (workerLog += d));
-  worker.stderr!.on('data', (d) => (workerLog += d));
-  await expect.poll(() => workerLog, { timeout: 60_000, message: 'worker did not start' }).toContain('listening for');
 });
 
 test.afterAll(async () => {
-  if (worker && worker.exitCode === null) {
-    const exited = new Promise((done) => worker!.once('exit', done));
-    worker.kill('SIGTERM');
-    await exited;
-  }
   const rows = await sql<{ id: string }[]>`
     delete from downloads where lead_id in (select id from leads where email = ${EMAIL}) returning id`;
   const files = path.resolve(process.env.FILES_DIR || './var/files');
@@ -116,7 +102,7 @@ test('download A4: dialog → email link → ready page → PDF', async ({ page 
   await page.goto(new URL(link).pathname);
   await expect(page.getByTestId('download-page')).toBeVisible();
   const file = page.getByTestId('file-roznamah-wall-A4.pdf');
-  await expect(file, workerLog).toBeVisible({ timeout: 60_000 });
+  await expect(file, workerLog()).toBeVisible({ timeout: 60_000 });
   await expect(page.getByTestId('download-page')).toHaveAttribute('data-state', 'ready');
   if (SCREENSHOTS) await page.screenshot({ path: path.join(SCREENSHOTS, 'task-11-ready.png'), fullPage: true });
 

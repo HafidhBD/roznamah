@@ -14,7 +14,7 @@ test.afterAll(async () => {
 });
 
 
-test('plan builder: recommend, add, persist, isolate', async ({ page, browser }) => {
+test('plan builder: recommend, add, persist, isolate', async ({ page, browser, baseURL }) => {
   await page.goto('/');
   await page.getByTestId('sector-government').click();
   await page.getByTestId('chip-health').click();
@@ -46,7 +46,7 @@ test('plan builder: recommend, add, persist, isolate', async ({ page, browser })
 
   const other = await browser.newContext();
   const page2 = await other.newPage();
-  await page2.goto('http://localhost:3000/');
+  await page2.goto(`${baseURL}/`);
   await expect(page2.getByTestId('plan-count')).toHaveText('0');
   await remember(other);
   await other.close();

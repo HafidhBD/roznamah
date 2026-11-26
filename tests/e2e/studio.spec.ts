@@ -110,7 +110,7 @@ test('studio: identity settings drive the live preview and persist', async ({ pa
   await expect(preview(page).locator('[data-page="month"] .hijri')).toHaveCount(0);
 });
 
-test('logo endpoint: rejects a fake image, serves only the owner', async ({ page, browser }) => {
+test('logo endpoint: rejects a fake image, serves only the owner', async ({ page, browser, baseURL }) => {
   await seed(page, []);
   const fake = await page.request.post('/api/draft/logo', {
     multipart: {
@@ -142,7 +142,7 @@ test('logo endpoint: rejects a fake image, serves only the owner', async ({ page
 
   // a different visitor (no cookie) gets nothing
   const other = await browser.newContext();
-  const res = await other.request.get(`http://localhost:3000${body.logoUrl}`);
+  const res = await other.request.get(`${baseURL}${body.logoUrl}`);
   expect(res.status()).toBe(404);
   await remember(other);
   await other.close();
