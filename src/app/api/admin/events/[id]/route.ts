@@ -1,6 +1,6 @@
 import { adminRoute } from '@/lib/auth';
 import { eventInputSchema } from '@/lib/admin/event-schema';
-import { isForeignKeyViolation, isUniqueViolation, isUuid, updateEvent } from '@/lib/admin/events';
+import { isForeignKeyViolation, isUuid, updateEvent } from '@/lib/admin/events';
 
 type Ctx = { params: Promise<{ id: string }> };
 
@@ -16,12 +16,11 @@ export const PUT = adminRoute(async (req, { params }: Ctx) => {
   const parsed = eventInputSchema.safeParse(body);
   if (!parsed.success) return Response.json({ error: 'invalid', issues: parsed.error.issues }, { status: 400 });
   try {
-    if (!(await updateEvent(id, parsed.data))) return Response.json({ error: 'not_found' }, { status: 404 });
+    const result = await updateEvent(id, parsed.data);
+    if (result === 'not_found') return Response.json({ error: 'not_found' }, { status: 404 });
+    if (result === 'slug_immutable') return Response.json({ error: 'slug_immutable' }, { status: 400 });
   } catch (e) {
     if (isForeignKeyViolation(e)) return Response.json({ error: 'unknown_term' }, { status: 400 });
-    if (isUniqueViolation(e)) {
-      return Response.json({ error: 'slug_taken' }, { status: 409 });
-    }
     throw e;
   }
   return Response.json({ ok: true });

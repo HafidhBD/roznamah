@@ -238,3 +238,38 @@ describe('eventInputSchema', () => {
     expect(ok({ titleEn: 'a'.repeat(201) })).toBe(false);
   });
 });
+
+describe('slug is immutable after creation', () => {
+  const body = (slug: string) => ({
+    slug, titleAr: 'ثابت', titleEn: 'Fixed', kind: 'national', recurrence: 'annual_manual',
+    durationDays: 1, prepDays: 1, active: true, tags: [],
+  });
+  const send = (url: string, method: string, cookie: string, json: unknown) =>
+    new Request(url, { method, headers: { 'content-type': 'application/json', cookie }, body: JSON.stringify(json) });
+  let id = '';
+  afterAll(async () => {
+    await db.delete(events).where(eq(events.slug, 'slug-immutable-test'));
+    await db.delete(events).where(eq(events.slug, 'slug-immutable-renamed'));
+  });
+
+  it('PUT with a different slug is 400 slug_immutable and changes nothing; the same slug saves', async () => {
+    const { POST } = await import('@/app/api/admin/events/route');
+    const { PUT } = await import('@/app/api/admin/events/[id]/route');
+    const cookie = `authjs.session-token=${await createAdminSession(sql, ADMIN)}`;
+    const created = await POST(send('http://x/api/admin/events', 'POST', cookie, body('slug-immutable-test')));
+    expect(created.status).toBe(201);
+    id = ((await created.json()) as { id: string }).id;
+    const ctx = { params: Promise.resolve({ id }) };
+
+    const renamed = await PUT(send(`http://x/api/admin/events/${id}`, 'PUT', cookie, { ...body('slug-immutable-renamed'), titleEn: 'Changed' }), ctx);
+    expect(renamed.status).toBe(400);
+    expect(await renamed.json()).toMatchObject({ error: 'slug_immutable' });
+    const [row] = await db.select().from(events).where(eq(events.id, id));
+    expect(row).toMatchObject({ slug: 'slug-immutable-test', titleEn: 'Fixed' });
+
+    const same = await PUT(send(`http://x/api/admin/events/${id}`, 'PUT', cookie, { ...body('slug-immutable-test'), titleEn: 'Changed' }), ctx);
+    expect(same.status).toBe(200);
+    const [after] = await db.select().from(events).where(eq(events.id, id));
+    expect(after).toMatchObject({ slug: 'slug-immutable-test', titleEn: 'Changed' });
+  });
+});

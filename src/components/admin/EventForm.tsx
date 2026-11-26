@@ -127,7 +127,15 @@ export function EventForm({ id, initial, terms }: { id?: string; initial: EventF
         router.refresh();
       } else {
         const err = (await res.json().catch(() => ({}))) as { error?: string };
-        setStatus({ kind: 'error', text: err.error === 'slug_taken' ? L('admin.form.slugTaken') : L('admin.form.error') });
+        setStatus({
+          kind: 'error',
+          text:
+            err.error === 'slug_taken'
+              ? L('admin.form.slugTaken')
+              : err.error === 'slug_immutable'
+                ? L('admin.form.slugFixed')
+                : L('admin.form.error'),
+        });
       }
     } finally {
       setBusy(false);
@@ -138,7 +146,21 @@ export function EventForm({ id, initial, terms }: { id?: string; initial: EventF
     <form onSubmit={onSubmit} data-testid="event-form" className="flex max-w-3xl flex-col gap-4 rounded-xl border border-line bg-surface p-4">
       <div className="grid gap-3 md:grid-cols-2">
         <Field label={L('admin.form.slug')}>
-          <input name="slug" defaultValue={initial.slug} required dir="ltr" data-testid="field-slug" className={box} />
+          <input
+            name="slug"
+            defaultValue={initial.slug}
+            required
+            readOnly={!!id}
+            aria-describedby={id ? 'slug-hint' : undefined}
+            dir="ltr"
+            data-testid="field-slug"
+            className={`${box} ${id ? 'cursor-not-allowed text-muted' : ''}`}
+          />
+          {id && (
+            <span id="slug-hint" className="text-xs text-muted">
+              {L('admin.form.slugFixed')}
+            </span>
+          )}
         </Field>
         <Field label={L('admin.form.kind')}>
           <select name="kind" defaultValue={initial.kind} className={box}>

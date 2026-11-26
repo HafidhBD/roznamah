@@ -20,19 +20,21 @@ export async function createEvent(input: EventInput): Promise<string> {
   });
 }
 
-/** Returns false when the event does not exist. */
-export async function updateEvent(id: string, input: EventInput): Promise<boolean> {
+/**
+ * The slug is the seed's identity for an event: renaming it would make the insert-only seed recreate
+ * the original on the next release. So it is fixed after creation (`slug_immutable`).
+ */
+export async function updateEvent(id: string, input: EventInput): Promise<'ok' | 'not_found' | 'slug_immutable'> {
   const { tags, fields } = split(input);
+  const { slug, ...rest } = fields;
   return db.transaction(async (tx) => {
-    const updated = await tx
-      .update(events)
-      .set({ ...fields, updatedAt: new Date() })
-      .where(eq(events.id, id))
-      .returning({ id: events.id });
-    if (!updated.length) return false;
+    const [current] = await tx.select({ slug: events.slug }).from(events).where(eq(events.id, id)).for('update');
+    if (!current) return 'not_found';
+    if (current.slug !== slug) return 'slug_immutable';
+    await tx.update(events).set({ ...rest, updatedAt: new Date() }).where(eq(events.id, id));
     await tx.delete(eventTags).where(eq(eventTags.eventId, id));
     if (tags.length) await tx.insert(eventTags).values(tags.map((t) => ({ eventId: id, ...t })));
-    return true;
+    return 'ok';
   });
 }
 
