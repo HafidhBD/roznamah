@@ -12,7 +12,9 @@
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
     "db:migrate:test": "DATABASE_URL=postgresql://roznamah:roznamah@localhost:5432/roznamah_test drizzle-kit migrate",
-    "db:seed": "tsx src/db/seed/run.ts"
+    "db:seed": "tsx src/db/seed/run.ts",
+    "db:migrate:prod": "node worker/dist/migrate.js",
+    "build:worker": "tsup"
   },
   "dependencies": {
     "@fontsource/cairo": "^5.3.0",
@@ -23,6 +25,8 @@
     "drizzle-orm": "^0.45.4",
     "next": "^16.4.6",
     "node-vibrant": "^4.0.4",
+    "pg-boss": "^12.40.0",
+    "playwright": "^1.65.1",
     "postgres": "^4.1.1",
     "react": "^19.3.1",
     "react-dom": "^19.3.1",
@@ -38,6 +42,7 @@
     "drizzle-kit": "^0.31.11",
     "postcss": "^8.5.33",
     "tailwindcss": "^4.3.5",
+    "tsup": "^9.0.0",
     "tsx": "^4.23.15",
     "typescript": "^7.0.2",
     "vitest": "^5.1.2"

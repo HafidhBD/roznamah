@@ -1,0 +1,133 @@
+# Roznamah production stack (project name: roznamah). See deploy/README.md.
+# Variables come from deploy/.env (auto-loaded next to this file, gitignored) or the Compose project's
+# environment; the container env below is built explicitly from them (no env_file, so nothing extra leaks in).
+name: roznamah
+
+x-app-env: &app-env
+  NODE_ENV: production
+  DATABASE_URL: postgresql://roznamah:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}@db:5432/roznamah
+  APP_URL: https://${APP_HOST:?set APP_HOST}
+  UPLOAD_DIR: /data/uploads
+  FILES_DIR: /data/files
+  AUTH_TRUST_HOST: "true"
+  AUTH_SECRET: ${AUTH_SECRET:?set AUTH_SECRET}
+  RENDER_SECRET: ${RENDER_SECRET:?set RENDER_SECRET}
+  ADMIN_EMAILS: ${ADMIN_EMAILS:?set ADMIN_EMAILS}
+  RESEND_API_KEY: ${RESEND_API_KEY:-}
+  EMAIL_FROM: ${EMAIL_FROM:-}
+  TURNSTILE_SITE_KEY: ${TURNSTILE_SITE_KEY:-}
+  TURNSTILE_SECRET_KEY: ${TURNSTILE_SECRET_KEY:-}
+  LEAD_NOTIFY_EMAILS: ${LEAD_NOTIFY_EMAILS:-}
+
+services:
+  db:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: roznamah
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
+      POSTGRES_DB: roznamah
+    volumes:
+      - roznamah-db:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U roznamah -d roznamah"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    # Internal only: no ports, not on the traefik network.
+
+  # One-shot: apply migrations, then the insert-only seed (safe to rerun on every release).
+  # Runs first on the app image so the roznamah-data volume is created with pwuser ownership.
+  migrate:
+    image: ${IMAGE:?set IMAGE, e.g. ghcr.io/<owner>/roznamah:latest}
+    restart: "no"
+    environment: *app-env
+    command: ["sh", "-c", "node worker/dist/migrate.js && node worker/dist/seed.js"]
+    volumes:
+      - roznamah-data:/data
+    depends_on:
+      db:
+        condition: service_healthy
+
+  app:
+    image: ${IMAGE:?set IMAGE}
+    restart: unless-stopped
+    environment: *app-env
+    command: ["node", "server.js"]
+    volumes:
+      - roznamah-data:/data
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    networks:
+      - default
+      - traefik
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=${TRAEFIK_NETWORK:?set TRAEFIK_NETWORK}
+      - traefik.http.routers.roznamah.rule=Host(`${APP_HOST}`)
+      - traefik.http.routers.roznamah.entrypoints=websecure
+      - traefik.http.routers.roznamah.tls=true
+      - traefik.http.routers.roznamah.tls.certresolver=${TRAEFIK_CERTRESOLVER:-letsencrypt}
+      - traefik.http.routers.roznamah.middlewares=roznamah-body@docker
+      - traefik.http.services.roznamah.loadbalancer.server.port=3000
+      # Logo uploads are capped at 5 MB in the app; 6 MB here leaves room for multipart overhead.
+      - traefik.http.middlewares.roznamah-body.buffering.maxRequestBodyBytes=6291456
+
+  worker:
+    image: ${IMAGE:?set IMAGE}
+    restart: unless-stopped
+    environment: *app-env
+    command: ["node", "worker/dist/index.js"]
+    mem_limit: 2g
+    init: true
+    shm_size: 1gb
+    volumes:
+      - roznamah-data:/data
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+
+  # Nightly pg_dump (03:00 UTC, custom format) into /data/backups, keeping 14 days.
+  backup:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      PGHOST: db
+      PGUSER: roznamah
+      PGDATABASE: roznamah
+      PGPASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
+    volumes:
+      - roznamah-data:/data
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    command:
+      - sh
+      - -c
+      - |
+        mkdir -p /data/backups
+        while true; do
+          now=$$(date +%s)
+          next=$$(( now - now % 86400 + 10800 ))
+          [ "$$next" -le "$$now" ] && next=$$(( next + 86400 ))
+          sleep $$(( next - now ))
+          f=/data/backups/roznamah-$$(date +%Y%m%d-%H%M%S).dump
+          if pg_dump -Fc -f "$$f.tmp"; then mv "$$f.tmp" "$$f"; echo "backup ok: $$f"; else rm -f "$$f.tmp"; echo "backup FAILED"; fi
+          find /data/backups -name 'roznamah-*.dump' -mtime +14 -delete
+        done
+
+volumes:
+  roznamah-db:
+  roznamah-data:
+
+networks:
+  traefik:
+    external: true
+    name: ${TRAEFIK_NETWORK:?set TRAEFIK_NETWORK}
