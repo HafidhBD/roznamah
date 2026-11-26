@@ -1,6 +1,6 @@
 /**
  * The whole customer journey, as a visitor does it: landing → recommendations → add all high matches →
- * calendar (White Friday in November) → studio (name, logo, official template) → download A4 →
+ * calendar (White Friday in its month) → studio (name, logo, official template) → download A4 →
  * emailed link (memory outbox) → file listed. Arabic on a phone, then English on a laptop.
  * Every page: no horizontal scroll and no console errors.
  *
@@ -13,8 +13,10 @@ import postgres from 'postgres';
 
 const SHOTS = process.env.JOURNEY_SCREENSHOTS;
 const LOGO = path.join(__dirname, '../fixtures/logo.png');
-// Default span: January of next year → December; White Friday has a confirmed 2027 date.
-const YEAR = new Date().getUTCFullYear() + 1;
+/** Seeded White Friday dates (annual_manual: only the years the seed/admin filled in). */
+let whiteFridayDates: string[] = [];
+/** Exclusive end of the 12-month span starting at `month` (YYYY-MM-01). */
+const spanEndExclusive = (month: string) => `${Number(month.slice(0, 4)) + 1}${month.slice(4)}`;
 
 type Run = {
   lang: 'ar' | 'en';
@@ -38,6 +40,11 @@ const emails = RUNS.map((r) => r.email);
 test.beforeAll(async () => {
   sql = postgres(process.env.DATABASE_URL!);
   await sql`delete from leads where email = any(${emails})`; // earlier runs: no rate limit or reuse
+  const rows = await sql<{ d: string }[]>`
+    select o.start_date::text as d from event_occurrences o join events e on e.id = o.event_id
+    where e.slug = 'white-friday' order by o.start_date`;
+  whiteFridayDates = rows.map((r) => r.d);
+  expect(whiteFridayDates.length, 'seeded White Friday occurrences').toBeGreaterThan(0);
 });
 
 test.afterAll(async () => {
@@ -89,7 +96,17 @@ for (const run of RUNS) {
     await page.getByTestId('sector-private').click();
     await page.getByTestId('chip-retail').click();
     await page.getByTestId('chip-marketing').click();
-    await expect(page.getByTestId('start-month')).toHaveValue(`${YEAR}-01-01`);
+    // A start month the picker offers whose span holds a seeded White Friday (default first), so the
+    // journey does not depend on the current year having one.
+    const select = page.getByTestId('start-month');
+    const current = await select.inputValue();
+    const offered = await select.locator('option').evaluateAll((os) => os.map((o) => (o as HTMLOptionElement).value));
+    const fits = (m: string) => whiteFridayDates.find((d) => d >= m && d < spanEndExclusive(m));
+    const startMonth = [current, ...offered].find((m) => fits(m));
+    expect(startMonth, `a start month covering one of ${whiteFridayDates.join(', ')}`).toBeTruthy();
+    const whiteFridayMonth = fits(startMonth!)!.slice(0, 7);
+    if (startMonth !== current) await select.selectOption(startMonth!);
+    await expect(select).toHaveValue(startMonth!);
     const recsResponse = page.waitForResponse((r) => r.url().endsWith('/api/recommendations') && r.ok());
     await page.getByTestId('recommend-btn').click();
     const { items } = (await (await recsResponse).json()) as { items: { band: string; titleEn: string }[] };
@@ -110,13 +127,13 @@ for (const run of RUNS) {
     await page.getByTestId('results').scrollIntoViewIfNeeded();
     await shot(page, run, 'landing', false);
 
-    // ---- calendar: White Friday in November ----
+    // ---- calendar: White Friday in its month ----
     await page.getByTestId('plan-bar-link').click();
     await expect(page).toHaveURL(/\/calendar$/);
     await expect(page.getByTestId('calendar-count')).toHaveText(String(added));
-    await page.getByTestId(`strip-${YEAR}-11`).click();
-    const novemberPills = page.locator(`[data-testid^="day-${YEAR}-11-"]`).getByTestId('pill');
-    await expect(novemberPills.filter({ hasText: run.whiteFriday })).toHaveCount(1);
+    await page.getByTestId(`strip-${whiteFridayMonth}`).click();
+    const whiteFridayPills = page.locator(`[data-testid^="day-${whiteFridayMonth}-"]`).getByTestId('pill');
+    await expect(whiteFridayPills.filter({ hasText: run.whiteFriday })).toHaveCount(1);
     await noHorizontalScroll(page, 'calendar');
     await shot(page, run, 'calendar');
 
