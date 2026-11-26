@@ -7,7 +7,15 @@ Stack: `db` (Postgres 17) · `migrate` (one-shot: migrations + insert-only seed)
 ## 1. Prerequisites / المتطلبات
 
 - **Domain / النطاق:** DNS `A` record for `APP_HOST` -> `186.240.150.99`. Wait until it resolves before first start (Let's Encrypt needs it).
-- **Resend (required):** a verified sending domain; `EMAIL_FROM` on that domain (e.g. `Roznamah <no-reply@yourdomain>`), and `RESEND_API_KEY`. `docker compose config` refuses to run without them, and the app/worker log `CONFIG ERROR` at startup if either is empty.
+- **Email (required, one of two drivers):** all mail (download links, lead notifications, admin magic links) goes through one driver. `EMAIL_FROM` is always required (`docker compose config` refuses to run without it). The app/worker log `CONFIG ERROR` at startup (variable names only) when neither driver is complete.
+  - **Microsoft 365 via Microsoft Graph (recommended),** the same integration as the Waves HR system. In Entra ID (Azure AD) register an app, add the Microsoft Graph **application** permission `Mail.Send` and grant admin consent, and create a client secret. Restrict the app to the sender mailbox with an Exchange Online Application Access Policy (otherwise `Mail.Send` lets it send as any mailbox in the tenant):
+    ```powershell
+    New-DistributionGroup -Name "Roznamah mail senders" -Type Security -Members calendar@yourdomain
+    New-ApplicationAccessPolicy -AppId <MS_CLIENT_ID> -PolicyScopeGroupId "Roznamah mail senders" -AccessRight RestrictAccess -Description "Roznamah sends only as calendar@"
+    Test-ApplicationAccessPolicy -AppId <MS_CLIENT_ID> -Identity calendar@yourdomain   # AccessCheckResult: Granted
+    ```
+    Set `MS_TENANT_ID`, `MS_CLIENT_ID`, `MS_CLIENT_SECRET` and `MAIL_GRAPH_SENDER` (the mailbox to send as; empty = the address in `EMAIL_FROM`). With all three `MS_*` set the driver is `graph` automatically (or set `MAIL_DRIVER=graph`); `RESEND_API_KEY` is then not needed. Graph sends **as the mailbox**: recipients see that mailbox's display name from Microsoft 365, not the display name in `EMAIL_FROM`, so name the mailbox accordingly (e.g. "Roznamah | Waves"). `MAIL_SAVE_TO_SENT=true` keeps a copy in its Sent Items (default off, so magic links do not pile up there). The client secret expires (max 24 months in Entra): rotate it before then, or mail stops with `Microsoft login failed: invalid_client` in the logs.
+  - **Resend (alternative):** a verified sending domain, `EMAIL_FROM` on that domain (e.g. `Roznamah <no-reply@yourdomain>`) and `RESEND_API_KEY`. Used when the `MS_*` trio is not set (or with `MAIL_DRIVER=resend`).
 - **PRIVACY_EMAIL (required):** the address shown on `/privacy` for data-deletion requests (e.g. `privacy@yourdomain`).
 - **ADMIN_EMAILS:** comma-separated, lowercase; only these can open `/admin`.
 - **Secrets / الأسرار:** generate each separately:
@@ -37,8 +45,12 @@ POSTGRES_PASSWORD=<hex>
 AUTH_SECRET=<base64>
 RENDER_SECRET=<base64>
 ADMIN_EMAILS=<a@x.com,b@x.com>
-RESEND_API_KEY=<key>
-EMAIL_FROM=Roznamah <no-reply@yourdomain>
+EMAIL_FROM=Roznamah <calendar@yourdomain>
+# Microsoft 365 (recommended); or instead RESEND_API_KEY=<key>
+MS_TENANT_ID=<tenant id>
+MS_CLIENT_ID=<application (client) id>
+MS_CLIENT_SECRET=<client secret value>
+MAIL_GRAPH_SENDER=calendar@yourdomain
 PRIVACY_EMAIL=privacy@yourdomain
 TURNSTILE_SITE_KEY=<site key>
 TURNSTILE_SECRET_KEY=<secret key>

@@ -13,8 +13,16 @@ x-app-env: &app-env
   AUTH_SECRET: ${AUTH_SECRET:?set AUTH_SECRET}
   RENDER_SECRET: ${RENDER_SECRET:?set RENDER_SECRET}
   ADMIN_EMAILS: ${ADMIN_EMAILS:?set ADMIN_EMAILS}
-  RESEND_API_KEY: ${RESEND_API_KEY:?set RESEND_API_KEY (admin sign-in and download emails need it)}
-  EMAIL_FROM: ${EMAIL_FROM:?set EMAIL_FROM, e.g. Roznamah <no-reply@yourdomain> on a Resend-verified domain}
+  # Email: Microsoft 365 via Graph (recommended: the MS_* trio + MAIL_GRAPH_SENDER) or Resend (RESEND_API_KEY).
+  # One of the two is required; the app/worker log CONFIG ERROR at startup when neither is complete.
+  MAIL_DRIVER: ${MAIL_DRIVER:-}
+  MS_TENANT_ID: ${MS_TENANT_ID:-}
+  MS_CLIENT_ID: ${MS_CLIENT_ID:-}
+  MS_CLIENT_SECRET: ${MS_CLIENT_SECRET:-}
+  MAIL_GRAPH_SENDER: ${MAIL_GRAPH_SENDER:-}
+  MAIL_SAVE_TO_SENT: ${MAIL_SAVE_TO_SENT:-}
+  RESEND_API_KEY: ${RESEND_API_KEY:-}
+  EMAIL_FROM: ${EMAIL_FROM:?set EMAIL_FROM, e.g. Roznamah <no-reply@yourdomain> (Graph: the sender mailbox address; Resend: a verified domain)}
   PRIVACY_EMAIL: ${PRIVACY_EMAIL:?set PRIVACY_EMAIL (shown on /privacy for data-deletion requests)}
   # Turnstile: set BOTH for public launch (only one set = downloads fail closed and the app logs an error).
   TURNSTILE_SITE_KEY: ${TURNSTILE_SITE_KEY:-}
