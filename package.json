@@ -14,7 +14,8 @@
     "db:migrate:test": "DATABASE_URL=postgresql://roznamah:roznamah@localhost:5432/roznamah_test drizzle-kit migrate",
     "db:seed": "tsx src/db/seed/run.ts",
     "db:migrate:prod": "node worker/dist/migrate.js",
-    "build:worker": "tsup"
+    "build:worker": "tsup",
+    "worker": "tsx worker/index.ts"
   },
   "dependencies": {
     "@auth/drizzle-adapter": "^1.11.3",
@@ -34,6 +35,7 @@
     "postgres": "^4.1.1",
     "react": "^19.3.1",
     "react-dom": "^19.3.1",
+    "resend": "^6.40.1",
     "sharp": "^0.35.5",
     "zod": "^4.6.7"
   },

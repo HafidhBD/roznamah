@@ -24,5 +24,7 @@ export default defineConfig({
     url: baseURL,
     reuseExistingServer: true,
     timeout: 120_000,
+    // Downloads e2e reads emails from the in-memory outbox (GET /api/test/outbox).
+    env: { PORT: port, EMAIL_TRANSPORT: 'memory' },
   },
 });

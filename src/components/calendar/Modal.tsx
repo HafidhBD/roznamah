@@ -27,7 +27,7 @@ export function Modal({ title, closeLabel, onClose, testId, children }: Props) {
       if (e.key !== 'Tab' || !ref.current) return;
       const f = [
         ...ref.current.querySelectorAll<HTMLElement>(
-          'button:not([disabled]), input:not([disabled]), [href], [tabindex]:not([tabindex="-1"])',
+          'button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [href], [tabindex]:not([tabindex="-1"])',
         ),
       ];
       if (!f.length) return;

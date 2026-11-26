@@ -19,10 +19,13 @@ import {
 
 import type { Selections } from '@/lib/recommend';
 import type { Design } from '@/lib/design';
+import type { PageFormat } from '@/lib/print-sizes';
 import type { CalendarSnapshot } from '@/lib/snapshot-core';
 
-// Placeholder jsonb type; later tasks will tighten it.
-export type FormatRequest = Record<string, unknown>;
+/** One requested output of a download (same shape as the print route's page format). */
+export type FormatRequest = PageFormat;
+/** A rendered file of a download, stored under FILES_DIR/<downloadId>/<name>. */
+export type DownloadFile = { name: string; size: number };
 export type { CalendarSnapshot };
 
 export const taxonomyGroup = pgEnum('taxonomy_group', ['sector', 'field', 'audience', 'use']);
@@ -173,7 +176,7 @@ export const downloads = pgTable('downloads', {
   formats: jsonb('formats').$type<FormatRequest[]>().notNull().default([]),
   snapshot: jsonb('snapshot').$type<CalendarSnapshot>().notNull(),
   status: downloadStatus('status').notNull().default('queued'),
-  files: jsonb('files').$type<{ name: string; size: number }[]>().notNull().default([]),
+  files: jsonb('files').$type<DownloadFile[]>().notNull().default([]),
   error: text('error'),
   expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),

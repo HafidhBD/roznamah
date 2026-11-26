@@ -1,7 +1,7 @@
 import ExcelJS from 'exceljs';
 import { and, desc, eq, gte, inArray, lt, type SQL, sql } from 'drizzle-orm';
 import { db } from '@/db/client';
-import { downloads, leads, taxonomyTerms } from '@/db/schema';
+import { downloads, leads, taxonomyTerms, type FormatRequest } from '@/db/schema';
 import { t } from '@/i18n/core';
 
 export const LEADS_PAGE_SIZE = 25;
@@ -34,10 +34,9 @@ export function leadWhere(f: LeadFilters): SQL | undefined {
 
 const riyadhDate = (d: Date) => d.toLocaleDateString('en-CA', { timeZone: 'Asia/Riyadh' });
 
-function formatLabel(f: Record<string, unknown>): string {
-  const name = [f.format, f.type, f.kind, f.name].find((v) => typeof v === 'string') as string | undefined;
-  if (!name) return JSON.stringify(f);
-  return typeof f.size === 'string' ? `${name} ${f.size}` : name;
+function formatLabel(f: FormatRequest): string {
+  const base = `${t('ar', 'admin.leads.format.wall')} ${f.size}`;
+  return f.bleed ? `${base} (${t('ar', 'admin.leads.format.bleed')})` : base;
 }
 
 async function toViews(rows: (typeof leads.$inferSelect)[]): Promise<LeadView[]> {

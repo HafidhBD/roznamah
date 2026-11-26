@@ -1,25 +1,41 @@
+import { and, asc, eq } from 'drizzle-orm';
 import { StudioPanel } from '@/components/studio/StudioPanel';
+import { db } from '@/db/client';
+import { taxonomyTerms } from '@/db/schema';
 import { getLang } from '@/i18n';
 import { defaultDesign } from '@/lib/design';
 import { getDraft, listEventViews } from '@/lib/draft';
 import { logoUrlFor, storedPalette } from '@/lib/logo';
 import { ownLogoPath } from '@/lib/snapshot';
+import { turnstileSiteKey } from '@/lib/turnstile';
 
 export const dynamic = 'force-dynamic';
 
-export default async function Page() {
+export default async function Page({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const lang = await getLang();
-  const draft = await getDraft();
+  const [draft, sectorTerms] = await Promise.all([
+    getDraft(),
+    db
+      .select({ key: taxonomyTerms.key, labelAr: taxonomyTerms.labelAr, labelEn: taxonomyTerms.labelEn })
+      .from(taxonomyTerms)
+      .where(and(eq(taxonomyTerms.group, 'sector'), eq(taxonomyTerms.active, true)))
+      .orderBy(asc(taxonomyTerms.sort)),
+  ]);
   const design = { ...defaultDesign, ...draft?.design };
   const startMonth = draft?.startMonth ?? `${new Date().getUTCFullYear() + 1}-01-01`;
   const events = draft ? await listEventViews(draft, lang) : [];
   const logoPath = draft ? ownLogoPath(draft.id, design.logoPath) : null;
+  const sectors = sectorTerms.map((s) => ({ key: s.key, label: lang === 'en' ? s.labelEn : s.labelAr }));
 
   return (
     <div data-wide>
       <StudioPanel
         key={lang}
         lang={lang}
+        sectors={sectors}
+        initialSector={draft?.selections.sector ?? null}
+        turnstileSiteKey={turnstileSiteKey()}
+        openDownload={(await searchParams).download === '1'}
         startMonth={startMonth}
         initialDesign={design}
         initialLogoUrl={logoPath ? logoUrlFor(logoPath) : null}
