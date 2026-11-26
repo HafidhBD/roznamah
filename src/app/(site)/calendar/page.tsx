@@ -18,6 +18,7 @@ export default async function Page() {
 
   return (
     <CalendarApp
+      key={lang}
       lang={lang}
       startMonth={startMonth}
       weekStart={design.weekStart}

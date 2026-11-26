@@ -161,7 +161,7 @@ test('failures are shown to the visitor, and the form validates inline', async (
   );
   await page.getByTestId('custom-date').fill('2027-02-02');
   await page.getByTestId('custom-submit').click();
-  await expect(page.getByTestId('custom-error-date')).toBeVisible();
+  await expect(page.getByTestId('custom-error-date')).toHaveText('التاريخ خارج فترة التقويم الممتدة 12 شهرًا.');
 });
 
 test('weekStart follows the draft design (Monday first)', async ({ page }) => {
@@ -180,4 +180,15 @@ test('no horizontal overflow at 390px', async ({ page }) => {
   await page.getByTestId('strip-2027-09').click();
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth);
   expect(overflow).toBe(false);
+});
+
+test('language toggle refreshes occasion titles', async ({ page }) => {
+  await seed(page, [NATIONAL]);
+  await page.goto('/calendar');
+  await page.getByTestId('strip-2027-09').click();
+  await expect(page.getByTestId('pill')).toHaveText(NATIONAL);
+  await page.getByTestId('lang-toggle').click();
+  await expect(page.locator('html')).toHaveAttribute('lang', 'en');
+  await page.getByTestId('strip-2027-09').click();
+  await expect(page.getByTestId('pill')).toHaveText('Saudi National Day');
 });

@@ -73,6 +73,7 @@ export default async function Page() {
         </dl>
       </section>
       <PlanBuilder
+        key={lang}
         lang={lang}
         taxonomy={taxonomy}
         months={monthOptions(lang, startMonth)}

@@ -14,10 +14,34 @@ type Props = {
 export function Modal({ title, closeLabel, onClose, testId, children }: Props) {
   const ref = useRef<HTMLDivElement>(null);
 
+  const onCloseRef = useRef(onClose);
+  useEffect(() => {
+    onCloseRef.current = onClose;
+  });
+
   useEffect(() => {
     const previous = document.activeElement as HTMLElement | null;
     ref.current?.focus();
-    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose();
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') return onCloseRef.current();
+      if (e.key !== 'Tab' || !ref.current) return;
+      const f = [
+        ...ref.current.querySelectorAll<HTMLElement>(
+          'button:not([disabled]), input:not([disabled]), [href], [tabindex]:not([tabindex="-1"])',
+        ),
+      ];
+      if (!f.length) return;
+      const first = f[0];
+      const last = f[f.length - 1];
+      const active = document.activeElement;
+      if (e.shiftKey && (active === first || active === ref.current)) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && active === last) {
+        e.preventDefault();
+        first.focus();
+      }
+    };
     document.addEventListener('keydown', onKey);
     const overflow = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
@@ -26,7 +50,7 @@ export function Modal({ title, closeLabel, onClose, testId, children }: Props) {
       document.body.style.overflow = overflow;
       previous?.focus?.();
     };
-  }, [onClose]);
+  }, []);
 
   return (
     <div className="fixed inset-0 z-30 flex items-end justify-center sm:items-center sm:p-6">
