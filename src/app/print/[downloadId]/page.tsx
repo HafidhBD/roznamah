@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 import { CalendarDocument } from '@/components/calendar-document/CalendarDocument';
+import { docLangs } from '@/components/calendar-document/doc';
 import { decodePageFormat } from '@/lib/print-sizes';
 import { renderSecretMatches } from '@/lib/render-secret';
 import { downloadSnapshot } from './snapshot';
@@ -26,5 +27,10 @@ export default async function PrintPage({
   if (!format) notFound();
   const snapshot = await downloadSnapshot((await params).downloadId);
   if (!snapshot) notFound();
-  return <CalendarDocument data={snapshot} format={format} mode="print" />;
+  const { main, dir } = docLangs(snapshot.design.language);
+  return (
+    <div lang={main} dir={dir}>
+      <CalendarDocument data={snapshot} format={format} mode="print" />
+    </div>
+  );
 }

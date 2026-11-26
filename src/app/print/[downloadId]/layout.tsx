@@ -1,21 +1,11 @@
-import { docLangs } from '@/components/calendar-document/doc';
-import { downloadSnapshot } from './snapshot';
-
 /**
- * Root layout of the print renderer: a bare document (no site header or styles) whose language
- * and direction follow the calendar being printed.
+ * Root layout of the print renderer: a bare document (no site header or styles). It reads nothing
+ * from the DB, so nothing leaks before the page's key check; the page sets the calendar's own
+ * lang/dir on a wrapper element.
  */
-export default async function PrintLayout({
-  children,
-  params,
-}: {
-  children: React.ReactNode;
-  params: Promise<{ downloadId: string }>;
-}) {
-  const snapshot = await downloadSnapshot((await params).downloadId);
-  const { main, dir } = docLangs(snapshot?.design.language ?? 'ar');
+export default function PrintLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang={main} dir={dir}>
+    <html lang="ar" dir="rtl">
       <body style={{ margin: 0, background: '#fff' }}>{children}</body>
     </html>
   );
