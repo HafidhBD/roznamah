@@ -23,6 +23,7 @@ const baseURL = process.env.PLAYWRIGHT_BASE_URL ?? `http://localhost:${port}`;
 const e2eEnv: Record<string, string> = {
   PORT: port,
   NEXT_DIST_DIR: '.next/e2e',
+  E2E: '1',
   APP_URL: baseURL,
   AUTH_URL: baseURL,
   // Download e2e reads emails from the in-memory outbox (GET /api/test/outbox).
